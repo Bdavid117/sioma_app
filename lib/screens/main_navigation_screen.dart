@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'identification_screen.dart';
 import 'person_enrollment_screen.dart';
 import 'registered_persons_screen.dart';
 import 'database_test_screen.dart';
@@ -17,6 +18,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = [
+    const IdentificationScreen(),
     const PersonEnrollmentScreen(),
     const RegisteredPersonsScreen(),
     const DatabaseTestScreen(),
@@ -25,6 +27,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   ];
 
   final List<NavigationDestination> _destinations = [
+    const NavigationDestination(
+      icon: Icon(Icons.person_search),
+      selectedIcon: Icon(Icons.person_search),
+      label: 'Identificar',
+    ),
     const NavigationDestination(
       icon: Icon(Icons.person_add),
       selectedIcon: Icon(Icons.person_add),
@@ -68,7 +75,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         },
         destinations: _destinations,
         backgroundColor: Colors.grey[50],
-        indicatorColor: Colors.deepPurple.withOpacity(0.2),
+        indicatorColor: Colors.deepPurple.withValues(alpha: 0.2),
       ),
     );
   }
