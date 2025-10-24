@@ -3,7 +3,6 @@ import '../services/face_embedding_service.dart';
 import '../services/camera_service.dart';
 import '../screens/camera_capture_screen.dart';
 import 'dart:io';
-import 'dart:convert';
 
 /// Pantalla de prueba para validar la funcionalidad de embeddings faciales
 class EmbeddingTestScreen extends StatefulWidget {
@@ -547,7 +546,7 @@ class _StatChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.deepPurple.withOpacity(0.1),
+        color: Colors.deepPurple.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(

@@ -3,7 +3,6 @@ import '../services/face_embedding_service.dart';
 import '../models/person.dart';
 import '../models/identification_event.dart';
 import '../utils/validation_utils.dart';
-import 'dart:convert';
 import 'dart:developer' as developer;
 
 /// Servicio para realizar identificación 1:N contra la base de datos

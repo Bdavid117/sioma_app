@@ -328,7 +328,7 @@ class FaceGuidePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final Paint paint = Paint()
-      ..color = Colors.white.withOpacity(0.7)
+      ..color = Colors.white.withValues(alpha: 0.7)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.0;
 
