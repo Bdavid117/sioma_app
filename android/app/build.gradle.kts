@@ -7,7 +7,8 @@ plugins {
 
 android {
     namespace = "com.example.sioma_app"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
+    buildToolsVersion = "34.0.0"
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
