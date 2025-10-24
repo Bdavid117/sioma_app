@@ -2,6 +2,8 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/person.dart';
 import '../models/identification_event.dart';
+import '../utils/validation_utils.dart';
+import 'dart:developer' as developer;
 
 /// Servicio para gestionar la base de datos SQLite local
 class DatabaseService {
@@ -69,20 +71,83 @@ class DatabaseService {
 
   // ==================== OPERACIONES PERSONS ====================
 
-  /// Inserta una nueva persona
+  /// Inserta una nueva persona con validaciones de seguridad
   Future<int> insertPerson(Person person) async {
-    final db = await database;
-    return await db.insert('persons', person.toMap());
+    try {
+      // Validar datos de entrada
+      final nameValidation = ValidationUtils.validatePersonName(person.name);
+      if (!nameValidation.isValid) {
+        throw SiomaValidationException(nameValidation.error!, 'name');
+      }
+
+      final documentValidation = ValidationUtils.validateDocumentId(person.documentId);
+      if (!documentValidation.isValid) {
+        throw SiomaValidationException(documentValidation.error!, 'documentId');
+      }
+
+      final embeddingValidation = ValidationUtils.validateEmbeddingJson(person.embedding);
+      if (!embeddingValidation.isValid) {
+        throw SiomaValidationException(embeddingValidation.error!, 'embedding');
+      }
+
+      if (person.photoPath != null) {
+        final pathValidation = ValidationUtils.validateFilePath(person.photoPath!);
+        if (!pathValidation.isValid) {
+          throw SiomaValidationException(pathValidation.error!, 'photoPath');
+        }
+      }
+
+      // Verificar si el documento ya existe
+      final existingPerson = await getPersonByDocument(documentValidation.value!);
+      if (existingPerson != null) {
+        throw SiomaDatabaseException('Ya existe una persona registrada con el documento: ${documentValidation.value}');
+      }
+
+      // Crear persona con datos validados
+      final validatedPerson = Person(
+        name: nameValidation.value!,
+        documentId: documentValidation.value!,
+        photoPath: person.photoPath,
+        embedding: embeddingValidation.value!,
+        createdAt: person.createdAt,
+      );
+
+      final db = await database;
+      final id = await db.insert('persons', validatedPerson.toMap());
+
+      developer.log('Person inserted successfully: ID=$id, Document=${validatedPerson.documentId}');
+      return id;
+    } on SiomaValidationException {
+      rethrow;
+    } on SiomaDatabaseException {
+      rethrow;
+    } catch (e) {
+      developer.log('Error inserting person: $e', level: 1000);
+      throw SiomaDatabaseException('Error al insertar persona en la base de datos', e.toString());
+    }
   }
 
-  /// Obtiene todas las personas
-  Future<List<Person>> getAllPersons() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'persons',
-      orderBy: 'created_at DESC',
-    );
-    return List.generate(maps.length, (i) => Person.fromMap(maps[i]));
+  /// Obtiene todas las personas con límites de seguridad
+  Future<List<Person>> getAllPersons({int? limit, int? offset}) async {
+    try {
+      final db = await database;
+
+      // Aplicar límite de seguridad (máximo 1000 registros por consulta)
+      final safeLimit = limit != null ? (limit > 1000 ? 1000 : limit) : 100;
+      final safeOffset = offset ?? 0;
+
+      final List<Map<String, dynamic>> maps = await db.query(
+        'persons',
+        orderBy: 'created_at DESC',
+        limit: safeLimit,
+        offset: safeOffset,
+      );
+
+      return List.generate(maps.length, (i) => Person.fromMap(maps[i]));
+    } catch (e) {
+      developer.log('Error getting all persons: $e', level: 1000);
+      throw SiomaDatabaseException('Error al obtener la lista de personas', e.toString());
+    }
   }
 
   /// Obtiene una persona por ID
@@ -97,16 +162,30 @@ class DatabaseService {
     return Person.fromMap(maps.first);
   }
 
-  /// Obtiene una persona por documento
+  /// Obtiene una persona por documento con validación de entrada
   Future<Person?> getPersonByDocument(String documentId) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'persons',
-      where: 'document_id = ?',
-      whereArgs: [documentId],
-    );
-    if (maps.isEmpty) return null;
-    return Person.fromMap(maps.first);
+    try {
+      // Validar entrada para prevenir inyección SQL
+      final documentValidation = ValidationUtils.validateDocumentId(documentId);
+      if (!documentValidation.isValid) {
+        developer.log('Invalid document ID provided: $documentId');
+        return null; // Retorna null en lugar de lanzar excepción para búsquedas
+      }
+
+      final db = await database;
+      final List<Map<String, dynamic>> maps = await db.query(
+        'persons',
+        where: 'document_id = ?',
+        whereArgs: [documentValidation.value!],
+        limit: 1, // Limitar resultados por seguridad
+      );
+
+      if (maps.isEmpty) return null;
+      return Person.fromMap(maps.first);
+    } catch (e) {
+      developer.log('Error getting person by document: $e', level: 1000);
+      return null;
+    }
   }
 
   /// Actualiza una persona

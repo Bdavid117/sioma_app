@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'person_enrollment_screen.dart';
+import 'registered_persons_screen.dart';
 import 'database_test_screen.dart';
 import 'camera_test_screen.dart';
+import 'embedding_test_screen.dart';
 
 /// Pantalla principal con navegación entre las diferentes funcionalidades
 class MainNavigationScreen extends StatefulWidget {
@@ -14,11 +17,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = [
+    const PersonEnrollmentScreen(),
+    const RegisteredPersonsScreen(),
     const DatabaseTestScreen(),
     const CameraTestScreen(),
+    const EmbeddingTestScreen(),
   ];
 
   final List<NavigationDestination> _destinations = [
+    const NavigationDestination(
+      icon: Icon(Icons.person_add),
+      selectedIcon: Icon(Icons.person_add),
+      label: 'Registro',
+    ),
+    const NavigationDestination(
+      icon: Icon(Icons.people),
+      selectedIcon: Icon(Icons.people),
+      label: 'Personas',
+    ),
     const NavigationDestination(
       icon: Icon(Icons.storage),
       selectedIcon: Icon(Icons.storage),
@@ -28,6 +44,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       icon: Icon(Icons.camera_alt),
       selectedIcon: Icon(Icons.camera_alt),
       label: 'Cámara',
+    ),
+    const NavigationDestination(
+      icon: Icon(Icons.psychology),
+      selectedIcon: Icon(Icons.psychology),
+      label: 'Embeddings',
     ),
   ];
 

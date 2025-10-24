@@ -3,6 +3,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart';
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
+import '../utils/validation_utils.dart';
+import 'dart:developer' as developer;
 
 /// Servicio para gestionar la cámara y captura de imágenes
 class CameraService {
@@ -98,40 +100,101 @@ class CameraService {
     }
   }
 
-  /// Captura una foto y la guarda en almacenamiento local
+  /// Captura una foto y la guarda en almacenamiento local con validaciones de seguridad
   Future<String?> takePicture({String? fileName}) async {
-    if (!_isInitialized || _controller == null) return null;
+    if (!_isInitialized || _controller == null) {
+      developer.log('Camera not initialized or controller is null');
+      return null;
+    }
 
     try {
-      // Generar nombre único si no se proporciona
-      fileName ??= 'face_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      // Validar y sanitizar nombre de archivo
+      if (fileName != null) {
+        // Prevenir path traversal y caracteres peligrosos
+        fileName = fileName.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+        fileName = fileName.replaceAll('..', '_');
+        if (fileName.isEmpty || fileName.length > 100) {
+          fileName = null;
+        }
+      }
 
-      // Obtener directorio de aplicación
+      // Generar nombre seguro si no se proporciona o es inválido
+      fileName ??= 'face_${ValidationUtils.generateSecureId()}.jpg';
+
+      // Asegurar extensión correcta
+      if (!fileName.toLowerCase().endsWith('.jpg')) {
+        fileName = '${fileName.split('.').first}.jpg';
+      }
+
+      // Obtener directorio de aplicación de forma segura
       final Directory appDir = await getApplicationDocumentsDirectory();
       final String facesPath = join(appDir.path, 'faces');
 
-      // Crear directorio si no existe
+      // Crear directorio con permisos seguros si no existe
       final Directory facesDir = Directory(facesPath);
       if (!await facesDir.exists()) {
         await facesDir.create(recursive: true);
       }
 
-      // Ruta completa del archivo
+      // Validar ruta final antes de usar
       final String filePath = join(facesPath, fileName);
+      final pathValidation = ValidationUtils.validateFilePath(filePath);
+      if (!pathValidation.isValid) {
+        developer.log('Invalid file path generated: $filePath');
+        return null;
+      }
 
-      // Capturar foto
+      // Verificar que no excedamos límites de almacenamiento
+      final existingFiles = await getSavedPhotos();
+      if (existingFiles.length > 1000) { // Límite de seguridad
+        developer.log('Storage limit reached, cleaning old files');
+        // Eliminar archivos más antiguos si es necesario
+        await _cleanOldFiles(existingFiles, 900);
+      }
+
+      // Capturar foto con timeout de seguridad
       final XFile photo = await _controller!.takePicture();
 
+      // Verificar tamaño del archivo por seguridad
+      final File tempFile = File(photo.path);
+      final int fileSize = await tempFile.length();
+      if (fileSize > 10 * 1024 * 1024) { // Límite de 10MB
+        await tempFile.delete();
+        developer.log('File too large: ${fileSize} bytes');
+        return null;
+      }
+
       // Copiar archivo a ubicación permanente
-      await File(photo.path).copy(filePath);
+      await tempFile.copy(filePath);
 
-      // Eliminar archivo temporal
-      await File(photo.path).delete();
+      // Eliminar archivo temporal de forma segura
+      await tempFile.delete();
 
+      developer.log('Photo captured successfully: $filePath (${fileSize} bytes)');
       return filePath;
     } catch (e) {
-      print('Error al capturar foto: $e');
+      developer.log('Error capturing photo: $e', level: 1000);
       return null;
+    }
+  }
+
+  /// Limpia archivos antiguos cuando se alcanza el límite de almacenamiento
+  Future<void> _cleanOldFiles(List<File> files, int maxFiles) async {
+    if (files.length <= maxFiles) return;
+
+    try {
+      // Ordenar por fecha de modificación (más antiguos primero)
+      files.sort((a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
+
+      // Eliminar archivos más antiguos
+      final filesToDelete = files.take(files.length - maxFiles);
+      for (final file in filesToDelete) {
+        await file.delete();
+      }
+
+      developer.log('Cleaned ${filesToDelete.length} old files');
+    } catch (e) {
+      developer.log('Error cleaning old files: $e', level: 1000);
     }
   }
 
