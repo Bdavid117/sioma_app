@@ -120,10 +120,15 @@ class EnhancedIdentificationService {
       // PASO 4: COMPARACIÓN INTELIGENTE 1:N
       // ========================================
       AppLogger.info('PASO 4/5: Realizando comparación 1:N mejorada...');
+      AppLogger.info('📊 Total de personas en BD: ${allPersons.length}');
+      AppLogger.info('📐 Embedding de consulta: ${queryEmbedding.length} dimensiones');
+      
       final comparisonResults = <EnhancedPersonMatch>[];
 
       for (final person in allPersons) {
         try {
+          AppLogger.debug('🔍 Comparando con: ${person.name} (ID: ${person.id})');
+          
           final match = await _compareWithPerson(
             person: person,
             queryEmbedding: queryEmbedding,
@@ -132,7 +137,10 @@ class EnhancedIdentificationService {
           );
 
           if (match != null) {
+            AppLogger.debug('   ✅ Match válido: ${(match.adjustedConfidence * 100).toStringAsFixed(1)}%');
             comparisonResults.add(match);
+          } else {
+            AppLogger.debug('   ❌ No match (embedding insuficiente o error)');
           }
         } catch (e) {
           AppLogger.error('Error comparando con ${person.name}', error: e);
@@ -192,7 +200,11 @@ class EnhancedIdentificationService {
       // Parsear embedding almacenado
       final storedEmbedding = _parseEmbeddingFromJson(person.embedding);
 
+      AppLogger.debug('   📊 Embedding almacenado: ${storedEmbedding.length} dims');
+      AppLogger.debug('   📊 Embedding consulta: ${queryEmbedding.length} dims');
+
       if (queryEmbedding.length < 100 || storedEmbedding.length < 100) {
+        AppLogger.warning('   ⚠️ Embedding insuficiente (query: ${queryEmbedding.length}, stored: ${storedEmbedding.length})');
         return null; // Embedding insuficiente
       }
 
@@ -200,6 +212,10 @@ class EnhancedIdentificationService {
       final cosineSim = _calculateCosineSimilarity(queryEmbedding, storedEmbedding);
       final euclideanSim = _calculateEuclideanSimilarity(queryEmbedding, storedEmbedding);
       final manhattanSim = _calculateManhattanSimilarity(queryEmbedding, storedEmbedding);
+
+      AppLogger.debug('   📈 Similitudes - Coseno: ${(cosineSim * 100).toStringAsFixed(1)}%, '
+          'Euclidean: ${(euclideanSim * 100).toStringAsFixed(1)}%, '
+          'Manhattan: ${(manhattanSim * 100).toStringAsFixed(1)}%');
 
       // Confianza base combinada
       final baseConfidence = (cosineSim * 0.65) + (euclideanSim * 0.25) + (manhattanSim * 0.10);

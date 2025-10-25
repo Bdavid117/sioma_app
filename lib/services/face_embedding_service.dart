@@ -154,27 +154,29 @@ class FaceEmbeddingService {
       embedding.add(aspectRatio * area);
       
       // === BLOQUE 2: Características combinadas determinísticas (180 dimensiones) ===
-      // Seed determinístico basado en características faciales
+      // Seed determinístico basado SOLO en geometría facial (NO en expresiones variables)
+      // CRÍTICO: Usar solo bbox para que el mismo rostro genere el mismo seed
       final faceSeed = (
-        (mlKitFeatures.headAngle * 100).toInt().abs() +
-        (mlKitFeatures.leftEyeOpen * 1000).toInt() * 7 +
-        (mlKitFeatures.rightEyeOpen * 1000).toInt() * 11 +
-        (mlKitFeatures.smiling * 1000).toInt() * 13 +
-        (bbox.left ~/ 10) * 17 +
-        (bbox.top ~/ 10) * 19
+        (bbox.width * 1000).toInt().abs() * 7 +
+        (bbox.height * 1000).toInt().abs() * 11 +
+        ((bbox.width / bbox.height.clamp(1.0, 10000.0)) * 10000).toInt().abs() * 13
       ).abs();
+      
+      BiometricLogger.debug('Seed facial determinístico: $faceSeed (basado en geometría: ${bbox.width.toStringAsFixed(1)}x${bbox.height.toStringAsFixed(1)})');
       
       final mlKitRandom = Random(faceSeed);
       
-      // Generar 180 dimensiones determinísticas
+      // Generar 180 dimensiones determinísticas usando SOLO el seed geométrico
+      // Mezclamos características actuales para captura, pero el seed es estable
       for (int i = 0; i < 180; i++) {
         final base = mlKitRandom.nextDouble() * 2 - 1;
-        final angleInfluence = normalizedAngle * (i % 3 == 0 ? 0.8 : 0.3);
-        final eyeInfluence = ((leftEye + rightEye) / 2) * (i % 5 == 0 ? 0.7 : 0.2);
-        final smileInfluence = smile * (i % 7 == 0 ? 0.6 : 0.15);
-        final geoInfluence = (aspectRatio * area) * (i % 11 == 0 ? 0.5 : 0.1);
+        // Usar características actuales pero con peso menor para variabilidad controlada
+        final angleInfluence = normalizedAngle * 0.1 * (i % 17);
+        final eyeInfluence = ((leftEye + rightEye) / 2) * 0.08 * (i % 13);
+        final smileInfluence = smile * 0.06 * (i % 11);
+        final geoInfluence = (aspectRatio * area) * 0.3 * (i % 7);
         
-        final mixed = (base + angleInfluence + eyeInfluence + smileInfluence + geoInfluence) / 5.0;
+        final mixed = (base * 0.7) + (angleInfluence + eyeInfluence + smileInfluence + geoInfluence) * 0.3;
         embedding.add(mixed.clamp(-1.0, 1.0));
       }
       
@@ -234,33 +236,31 @@ class FaceEmbeddingService {
   int _calculateImageHash(img.Image image) {
     int hash = 17; // Número primo como seed
     
-    // Usar una cuadrícula MÁS GRUESA para mayor robustez
-    // Esto reduce sensibilidad a cambios de iluminación y compresión
-    final stepX = (image.width ~/ 8).clamp(1, image.width);  // Cambio: 16 -> 8
-    final stepY = (image.height ~/ 8).clamp(1, image.height); // Cambio: 16 -> 8
+    // Usar cuadrícula MUCHO más gruesa para máxima robustez
+    // Esto hace que el hash sea casi igual para la misma persona con diferente iluminación
+    final stepX = (image.width ~/ 4).clamp(1, image.width);  // Solo 4x4 grid
+    final stepY = (image.height ~/ 4).clamp(1, image.height);
     
     for (int y = 0; y < image.height; y += stepY) {
       for (int x = 0; x < image.width; x += stepX) {
         try {
           final pixel = image.getPixel(x, y);
-          // Convertir a escala de grises para reducir sensibilidad a color
           final r = pixel.r.toInt();
           final g = pixel.g.toInt();
           final b = pixel.b.toInt();
           
-          // Usar luminancia (escala de grises) en lugar de RGB individual
-          final luminance = ((0.299 * r + 0.587 * g + 0.114 * b) ~/ 32) * 32; // Cuantizar a bloques de 32
+          // Usar luminancia cuantizada BRUTALMENTE (bloques de 64 en lugar de 32)
+          final luminance = ((0.299 * r + 0.587 * g + 0.114 * b) ~/ 64) * 64;
           
-          // Hash más simple y robusto
+          // Hash simple
           hash = hash * 31 + luminance;
-          hash = hash ^ (luminance << 3);
         } catch (e) {
-          // Ignorar píxeles fuera de rango
           continue;
         }
       }
     }
     
+    BiometricLogger.debug('Hash de imagen: $hash (grid 4x4, cuantización 64)');
     return hash.abs();
   }
 
