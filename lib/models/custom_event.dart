@@ -4,6 +4,7 @@
 class CustomEvent {
   final int? id;
   final String eventType; // 'entrada', 'salida', 'visita', etc.
+  final String eventName; // Nombre descriptivo del evento
   final String location; // 'finca', 'oficina', 'almacén', etc.
   final int personId;
   final String personName;
@@ -17,6 +18,7 @@ class CustomEvent {
   CustomEvent({
     this.id,
     required this.eventType,
+    String? eventName,
     required this.location,
     required this.personId,
     required this.personName,
@@ -26,7 +28,21 @@ class CustomEvent {
     this.photoPath,
     this.metadata = const {},
     this.confidence,
-  });
+  }) : eventName = eventName ?? _getDefaultEventName(eventType);
+  
+  /// Obtiene el nombre por defecto según el tipo de evento
+  static String _getDefaultEventName(String eventType) {
+    switch (eventType.toLowerCase()) {
+      case 'entrada':
+        return 'Entrada';
+      case 'salida':
+        return 'Salida';
+      case 'visita':
+        return 'Visita';
+      default:
+        return eventType;
+    }
+  }
 
   // Getter de compatibilidad con código antiguo
   String get documentId => personDocument;
@@ -36,6 +52,7 @@ class CustomEvent {
     return {
       'id': id,
       'event_type': eventType,
+      'event_name': eventName,
       'location': location,
       'person_id': personId,
       'person_name': personName,
@@ -53,6 +70,7 @@ class CustomEvent {
     return CustomEvent(
       id: map['id']?.toInt(),
       eventType: map['event_type'] ?? '',
+      eventName: map['event_name'],
       location: map['location'] ?? '',
       personId: map['person_id']?.toInt() ?? 0,
       personName: map['person_name'] ?? '',
