@@ -364,11 +364,22 @@ class FaceEmbeddingService {
           return List.filled(embeddingSize, 0.0);
         }
         
-        result = cleanString
-            .split(',')
-            .where((s) => s.isNotEmpty)
-            .map((s) => double.tryParse(s) ?? 0.0)
-            .toList();
+        final tokens = cleanString.split(',').where((s) => s.isNotEmpty).toList();
+        final parsed = <double>[];
+        bool hasInvalid = false;
+        for (final t in tokens) {
+          final v = double.tryParse(t);
+          if (v == null) {
+            hasInvalid = true;
+            break;
+          }
+          parsed.add(v);
+        }
+        if (hasInvalid) {
+          BiometricLogger.debug('Embedding legacy inválido, contiene tokens no numéricos.');
+          return List.filled(embeddingSize, 0.0);
+        }
+        result = parsed;
       }
       
       // Validación de dimensiones

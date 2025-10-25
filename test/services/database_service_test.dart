@@ -3,6 +3,12 @@ import 'package:sioma_app/models/person.dart';
 import 'package:sioma_app/services/database_service.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+/// Genera un embedding JSON válido con 256 dimensiones
+String _embeddingJson256() {
+  final values = List<double>.generate(256, (i) => (i % 10 + 1) / 100.0);
+  return '[${values.map((v) => v.toStringAsFixed(2)).join(', ')}]';
+}
+
 void main() {
   // Inicializar FFI para tests
   setUpAll(() {
@@ -32,7 +38,7 @@ void main() {
         name: 'Test Usuario',
         documentId: 'TEST001',
         photoPath: '/test/photo.jpg',
-        embedding: '[0.1, 0.2, 0.3]',
+        embedding: _embeddingJson256(),
       );
 
       // Act
@@ -50,16 +56,16 @@ void main() {
     test('Debe rechazar documento duplicado', () async {
       // Arrange
       final person1 = Person(
-        name: 'Persona 1',
+        name: 'Persona Uno',
         documentId: 'DOC001',
         photoPath: '/test/p1.jpg',
-        embedding: '[0.1]',
+        embedding: _embeddingJson256(),
       );
       final person2 = Person(
-        name: 'Persona 2',
+        name: 'Persona Dos',
         documentId: 'DOC001', // Documento duplicado
         photoPath: '/test/p2.jpg',
-        embedding: '[0.2]',
+        embedding: _embeddingJson256(),
       );
 
       // Act
@@ -78,7 +84,7 @@ void main() {
         name: 'Juan Pérez',
         documentId: 'JP123',
         photoPath: '/test/juan.jpg',
-        embedding: '[0.5, 0.5]',
+        embedding: _embeddingJson256(),
       );
       await dbService.insertPerson(person);
 
@@ -105,7 +111,7 @@ void main() {
         name: 'Borrable',
         documentId: 'DEL001',
         photoPath: '/test/del.jpg',
-        embedding: '[0.1]',
+        embedding: _embeddingJson256(),
       );
       final id = await dbService.insertPerson(person);
 
@@ -125,7 +131,7 @@ void main() {
         name: 'Original',
         documentId: 'UPD001',
         photoPath: '/test/orig.jpg',
-        embedding: '[0.1]',
+        embedding: _embeddingJson256(),
       );
       final id = await dbService.insertPerson(person);
 
@@ -144,11 +150,12 @@ void main() {
     test('Debe obtener todas las personas con límite', () async {
       // Arrange
       for (int i = 0; i < 15; i++) {
+        final letter = String.fromCharCode(65 + (i % 26));
         await dbService.insertPerson(Person(
-          name: 'Persona $i',
-          documentId: 'DOC$i',
+          name: 'Persona $letter',
+          documentId: 'DOC${i.toString().padLeft(3, '0')}',
           photoPath: '/test/$i.jpg',
-          embedding: '[$i]',
+          embedding: _embeddingJson256(),
         ));
       }
 
@@ -174,13 +181,13 @@ void main() {
         name: 'Juan Carlos Pérez',
         documentId: 'JC001',
         photoPath: '/test/jc.jpg',
-        embedding: '[0.1]',
+        embedding: _embeddingJson256(),
       ));
       await dbService.insertPerson(Person(
         name: 'María García',
         documentId: 'MG001',
         photoPath: '/test/mg.jpg',
-        embedding: '[0.2]',
+        embedding: _embeddingJson256(),
       ));
 
       // Act
@@ -199,11 +206,12 @@ void main() {
     test('Debe contar total de personas', () async {
       // Arrange
       for (int i = 0; i < 5; i++) {
+        final letter = String.fromCharCode(65 + (i % 26));
         await dbService.insertPerson(Person(
-          name: 'P$i',
-          documentId: 'D$i',
+          name: 'Persona $letter',
+          documentId: 'DOC${i.toString().padLeft(3, '0')}',
           photoPath: '/t$i.jpg',
-          embedding: '[$i]',
+          embedding: _embeddingJson256(),
         ));
       }
 

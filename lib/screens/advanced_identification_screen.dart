@@ -68,7 +68,8 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
 
   @override
   void dispose() {
-    _stopScanning();
+    // Asegura detener el escaneo sin solicitar reconstrucción de UI
+    _stopScanning(fromDispose: true);
     _cameraService.dispose();
     super.dispose();
   }
@@ -483,15 +484,22 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
     });
   }
 
-  void _stopScanning() {
+  void _stopScanning({bool fromDispose = false}) {
+    // Detener el timer y limpiar estados sin reconstruir la UI si estamos en dispose
     _scanTimer?.cancel();
-    
-    setState(() {
-      _isScanning = false;
-      _consecutiveDetections = 0;
-      _lastDetectedPerson = null;
-    });
-    
+    _scanTimer = null;
+    _isScanning = false;
+    _isAutoMode = false; // Garantiza que no se reinicie el loop
+    _consecutiveDetections = 0;
+    _lastDetectedPerson = null;
+
+    // No llamar setState durante dispose para evitar "_ElementLifecycle.defunct"
+    // En escenarios normales, la UI relevante se actualiza donde se invoca _stopScanning
+    if (!fromDispose && mounted) {
+      // Actualización opcional y segura (mínima). Evitamos forzar animaciones innecesarias.
+      // setState(() {});
+    }
+
     AppLogger.info('🛑 Scanner detenido - Frames procesados: $_framesProcessed, Rostros: $_facesDetected');
   }
 

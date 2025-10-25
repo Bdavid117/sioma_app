@@ -7,24 +7,30 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:sioma_app/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  // Inicializar SQLite FFI y configurar ProviderScope para tests de widgets
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  testWidgets('Carga de app y navegación base', (WidgetTester tester) async {
+    // Construir la app con Riverpod
+    await tester.pumpWidget(const ProviderScope(child: MyApp()));
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // Permitir un frame inicial
+    await tester.pump(const Duration(milliseconds: 200));
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Validar que exista la barra de navegación inferior
+    expect(find.byType(NavigationBar), findsOneWidget);
+
+    // Validar que existan destinos principales (por etiqueta)
+    expect(find.text('Registrar'), findsWidgets);
+    expect(find.text('Eventos'), findsWidgets);
   });
 }

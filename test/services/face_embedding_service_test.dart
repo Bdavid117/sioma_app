@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sioma_app/services/face_embedding_service.dart';
 import 'dart:convert';
+import 'dart:math' as math;
 
 void main() {
   group('FaceEmbeddingService Tests', () {
@@ -99,7 +100,7 @@ void main() {
       final embedding = service.embeddingFromJson(jsonString);
 
       // Assert - Debe devolver embedding de ceros como fallback
-      expect(embedding.length, 512);
+      expect(embedding.length, 256);
       expect(embedding.every((v) => v == 0.0), true);
     });
 
@@ -109,8 +110,8 @@ void main() {
 
       // Recalcular con normalización L2
       final norm = embedding.fold<double>(0.0, (sum, val) => sum + val * val);
-      final magnitude = norm > 0 ? 1.0 / (norm + 1e-10) : 1.0;
-      final normalized = embedding.map((v) => v * magnitude).toList();
+  final magnitude = math.sqrt(norm + 1e-10);
+      final normalized = embedding.map((v) => v / magnitude).toList();
 
       // Assert
       final normalizedMagnitude = normalized.fold<double>(
@@ -164,10 +165,10 @@ void main() {
       expect(values[1], greaterThan(values[2]));
     });
 
-    test('Debe generar embeddings de 512 dimensiones', () async {
+    test('Debe generar embeddings de 256 dimensiones', () async {
       // Este test requiere una imagen real, por ahora solo verificamos el tamaño esperado
-      final expectedSize = 512;
-      expect(expectedSize, 512);
+      final expectedSize = 256;
+      expect(expectedSize, 256);
     });
 
     test('Debe validar dimensiones de embedding', () {
@@ -177,9 +178,9 @@ void main() {
       // Act
       final embedding = service.embeddingFromJson(jsonString);
 
-      // Assert - Debe advertir si dimensiones no son 512
-      if (embedding.length != 512) {
-        expect(embedding.length, lessThan(512));
+      // Assert - Debe advertir si dimensiones no son 256
+      if (embedding.length != 256) {
+        expect(embedding.length, lessThan(256));
       }
     });
   });

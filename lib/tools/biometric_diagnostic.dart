@@ -178,11 +178,11 @@ class BiometricDiagnostic {
 
       // Tomar la primera persona con foto
       final testPerson = persons.firstWhere(
-        (p) => p.photoPath.isNotEmpty && File(p.photoPath).existsSync(),
+        (p) => (p.photoPath ?? '').isNotEmpty && File(p.photoPath!).existsSync(),
         orElse: () => persons.first,
       );
 
-      if (testPerson.photoPath.isEmpty || !File(testPerson.photoPath).existsSync()) {
+      if ((testPerson.photoPath ?? '').isEmpty || !File(testPerson.photoPath!).existsSync()) {
         print('⚠️  Foto no encontrada: ${testPerson.photoPath}\n');
         return;
       }
@@ -192,9 +192,9 @@ class BiometricDiagnostic {
 
       // Generar embedding 3 veces de la misma imagen
       print('   Generando 3 embeddings de la misma imagen...');
-      final embedding1 = await _embeddingService.generateEmbedding(testPerson.photoPath);
-      final embedding2 = await _embeddingService.generateEmbedding(testPerson.photoPath);
-      final embedding3 = await _embeddingService.generateEmbedding(testPerson.photoPath);
+  final embedding1 = await _embeddingService.generateEmbedding(testPerson.photoPath!);
+  final embedding2 = await _embeddingService.generateEmbedding(testPerson.photoPath!);
+  final embedding3 = await _embeddingService.generateEmbedding(testPerson.photoPath!);
 
       if (embedding1 == null || embedding2 == null || embedding3 == null) {
         print('❌ Error generando embeddings\n');
@@ -259,7 +259,7 @@ class BiometricDiagnostic {
 
       // Tomar primera persona como "consulta"
       final queryPerson = persons.first;
-      if (queryPerson.photoPath.isEmpty || !File(queryPerson.photoPath).existsSync()) {
+      if ((queryPerson.photoPath ?? '').isEmpty || !File(queryPerson.photoPath!).existsSync()) {
         print('⚠️  Foto no encontrada para ${queryPerson.name}\n');
         return;
       }
@@ -268,7 +268,7 @@ class BiometricDiagnostic {
       print('   Foto: ${queryPerson.photoPath}\n');
 
       // Generar embedding de consulta
-      final queryEmbedding = await _embeddingService.generateEmbedding(queryPerson.photoPath);
+  final queryEmbedding = await _embeddingService.generateEmbedding(queryPerson.photoPath!);
       if (queryEmbedding == null) {
         print('❌ Error generando embedding de consulta\n');
         return;
