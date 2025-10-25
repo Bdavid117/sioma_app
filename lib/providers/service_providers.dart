@@ -4,6 +4,11 @@ import '../services/face_embedding_service.dart';
 import '../services/identification_service.dart';
 import '../services/camera_service.dart';
 import '../services/photo_quality_analyzer.dart';
+import '../services/face_detection_service.dart';
+import '../services/liveness_detector.dart';
+import '../services/database_backup_service.dart';
+import '../services/pdf_report_generator.dart';
+import '../services/realtime_scanner_service.dart';
 
 /// Provider singleton para DatabaseService
 final databaseServiceProvider = Provider<DatabaseService>((ref) {
@@ -28,6 +33,41 @@ final cameraServiceProvider = Provider<CameraService>((ref) {
 /// Provider singleton para PhotoQualityAnalyzer
 final photoQualityAnalyzerProvider = Provider<PhotoQualityAnalyzer>((ref) {
   return PhotoQualityAnalyzer();
+});
+
+/// Provider singleton para FaceDetectionService (ML Kit)
+final faceDetectionServiceProvider = Provider<FaceDetectionService>((ref) {
+  return FaceDetectionService();
+});
+
+/// Provider singleton para LivenessDetector
+final livenessDetectorProvider = Provider<LivenessDetector>((ref) {
+  return LivenessDetector();
+});
+
+/// Provider para DatabaseBackupService
+final databaseBackupServiceProvider = Provider<DatabaseBackupService>((ref) {
+  final databaseService = ref.watch(databaseServiceProvider);
+  return DatabaseBackupService(databaseService);
+});
+
+/// Provider para PDFReportGenerator
+final pdfReportGeneratorProvider = Provider<PDFReportGenerator>((ref) {
+  final databaseService = ref.watch(databaseServiceProvider);
+  return PDFReportGenerator(databaseService);
+});
+
+/// Provider para RealtimeScannerService
+final realtimeScannerServiceProvider = Provider<RealtimeScannerService>((ref) {
+  final faceDetection = ref.watch(faceDetectionServiceProvider);
+  final qualityAnalyzer = ref.watch(photoQualityAnalyzerProvider);
+  final identificationService = ref.watch(identificationServiceProvider);
+  
+  return RealtimeScannerService(
+    faceDetection: faceDetection,
+    qualityAnalyzer: qualityAnalyzer,
+    identificationService: identificationService,
+  );
 });
 
 /// FutureProvider para inicialización de base de datos

@@ -40,7 +40,7 @@ class _SmartCameraCaptureScreenState extends ConsumerState<SmartCameraCaptureScr
   Timer? _qualityCheckTimer;
   PhotoQualityResult? _currentQuality;
   int _goodQualityCount = 0;
-  static const int _requiredGoodFrames = 3; // Requiere 3 frames consecutivos de buena calidad
+  static const int _requiredGoodFrames = 2; // Reducido de 3 a 2 para captura más rápida
   
   // Captura automática
   bool _autoModeEnabled = true;
@@ -358,12 +358,19 @@ class _SmartCameraCaptureScreenState extends ConsumerState<SmartCameraCaptureScr
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Captura Inteligente'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
+          onPressed: () => Navigator.pop(context),
+        ),
         actions: [
           if (_cameraService.hasMultipleCameras())
             IconButton(
-              icon: const Icon(Icons.flip_camera_ios),
+              icon: const Icon(Icons.flip_camera_ios, color: Colors.white, size: 28),
               onPressed: () async {
                 _stopQualityMonitoring();
                 await _cameraService.switchCamera();
@@ -371,10 +378,13 @@ class _SmartCameraCaptureScreenState extends ConsumerState<SmartCameraCaptureScr
                   _startQualityMonitoring();
                 }
               },
-              tooltip: 'Cambiar cámara',
             ),
           IconButton(
-            icon: Icon(_autoModeEnabled ? Icons.auto_awesome : Icons.auto_awesome_outlined),
+            icon: Icon(
+              _autoModeEnabled ? Icons.auto_awesome : Icons.auto_awesome_outlined,
+              color: _autoModeEnabled ? Colors.greenAccent : Colors.white,
+              size: 28,
+            ),
             onPressed: () {
               setState(() {
                 _autoModeEnabled = !_autoModeEnabled;
@@ -385,128 +395,249 @@ class _SmartCameraCaptureScreenState extends ConsumerState<SmartCameraCaptureScr
                 }
               });
             },
-            tooltip: _autoModeEnabled ? 'Modo Auto' : 'Modo Manual',
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          : Stack(
               children: [
-                // Preview de cámara
-                Expanded(
-                  child: Stack(
-                    children: [
-                      if (_cameraService.isInitialized)
-                        Center(
-                          child: AspectRatio(
-                            aspectRatio: _cameraService.controller!.value.aspectRatio,
-                            child: CameraPreview(_cameraService.controller!),
-                          ),
-                        )
-                      else
-                        const Center(child: Text('Cámara no disponible')),
-                      
-                      // Overlay con guía facial
-                      if (_cameraService.isInitialized)
-                        Center(
-                          child: Container(
-                            width: 250,
-                            height: 300,
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: _currentQuality?.isOptimal == true
-                                    ? Colors.green
-                                    : Colors.white.withOpacity(0.5),
-                                width: _currentQuality?.isOptimal == true ? 4 : 2,
-                              ),
-                              borderRadius: BorderRadius.circular(150),
-                            ),
-                          ),
-                        ),
-                      
-                      // Indicador de análisis
-                      if (_isAnalyzing)
-                        const Positioned(
-                          top: 16,
-                          right: 16,
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            strokeWidth: 2,
-                          ),
-                        ),
-                    ],
+                // Cámara a PANTALLA COMPLETA
+                if (_cameraService.isInitialized)
+                  Positioned.fill(
+                    child: CameraPreview(_cameraService.controller!),
+                  )
+                else
+                  const Center(
+                    child: Text(
+                      'Cámara no disponible',
+                      style: TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                  ),
+                
+                // Overlay semitransparente superior
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: 120,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.7),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
                   ),
                 ),
                 
-                // Panel de información y controles
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Colors.black87,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Mensaje de estado
-                      Text(
-                        _statusMessage,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                // Guía facial mejorada - más grande
+                if (_cameraService.isInitialized)
+                  Center(
+                    child: Container(
+                      width: MediaQuery.of(context).size.width * 0.75,
+                      height: MediaQuery.of(context).size.width * 0.95,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: _currentQuality?.isOptimal == true
+                              ? Colors.greenAccent
+                              : Colors.white.withOpacity(0.7),
+                          width: _currentQuality?.isOptimal == true ? 5 : 3,
                         ),
-                        textAlign: TextAlign.center,
+                        borderRadius: BorderRadius.circular(200),
+                        boxShadow: _currentQuality?.isOptimal == true
+                            ? [
+                                BoxShadow(
+                                  color: Colors.greenAccent.withOpacity(0.5),
+                                  blurRadius: 20,
+                                  spreadRadius: 5,
+                                ),
+                              ]
+                            : null,
                       ),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // Indicadores de calidad
-                      if (_currentQuality != null)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _buildQualityIndicator(
-                              '💡',
-                              'Luz',
-                              _currentQuality!.brightnessScore,
+                    ),
+                  ),
+                
+                // Panel inferior con controles
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.8),
+                          Colors.black.withOpacity(0.95),
+                        ],
+                      ),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(20, 30, 20, 40),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Mensaje de estado - más prominente
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: _currentQuality?.isOptimal == true
+                                ? Colors.green.withOpacity(0.3)
+                                : Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(25),
+                            border: Border.all(
+                              color: _currentQuality?.isOptimal == true
+                                  ? Colors.greenAccent
+                                  : Colors.white.withOpacity(0.3),
+                              width: 2,
                             ),
-                            _buildQualityIndicator(
-                              '🎯',
-                              'Nitidez',
-                              _currentQuality!.sharpnessScore,
-                            ),
-                            _buildQualityIndicator(
-                              '🎨',
-                              'Contraste',
-                              _currentQuality!.contrastScore,
-                            ),
-                          ],
-                        ),
-                      
-                      const SizedBox(height: 16),
-                      
-                      // Botón de captura manual
-                      if (!_autoModeEnabled || !_cameraService.isInitialized)
-                        ElevatedButton.icon(
-                          onPressed: _isCapturing ? null : _captureManually,
-                          icon: const Icon(Icons.camera_alt),
-                          label: const Text('Capturar Foto'),
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 50),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_isAnalyzing)
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                ),
+                              if (_isAnalyzing) const SizedBox(width: 12),
+                              Flexible(
+                                child: Text(
+                                  _statusMessage,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    shadows: [
+                                      Shadow(
+                                        color: Colors.black,
+                                        blurRadius: 4,
+                                      ),
+                                    ],
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      
-                      if (_autoModeEnabled)
-                        Text(
-                          'Modo automático: ${_goodQualityCount}/$_requiredGoodFrames frames óptimos',
-                          style: const TextStyle(color: Colors.white70, fontSize: 12),
-                        ),
-                    ],
+                        
+                        const SizedBox(height: 20),
+                        
+                        // Indicadores de calidad - diseño mejorado
+                        if (_currentQuality != null)
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _buildQualityIndicator(
+                                  '💡',
+                                  'Luz',
+                                  _currentQuality!.brightnessScore,
+                                ),
+                                _buildQualityIndicator(
+                                  '🎯',
+                                  'Nitidez',
+                                  _currentQuality!.sharpnessScore,
+                                ),
+                                _buildQualityIndicator(
+                                  '🎨',
+                                  'Contraste',
+                                  _currentQuality!.contrastScore,
+                                ),
+                              ],
+                            ),
+                          ),
+                        
+                        const SizedBox(height: 20),
+                        
+                        // Botón de captura manual - más grande y atractivo
+                        if (!_autoModeEnabled)
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.white.withOpacity(0.3),
+                                  blurRadius: 10,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _isCapturing ? null : _captureManually,
+                                customBorder: const CircleBorder(),
+                                child: Center(
+                                  child: Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: _isCapturing
+                                          ? Colors.grey
+                                          : Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        
+                        // Indicador de modo automático
+                        if (_autoModeEnabled)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.greenAccent.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.greenAccent, width: 2),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.auto_awesome, color: Colors.greenAccent, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Modo automático: $_goodQualityCount/$_requiredGoodFrames frames',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
     );
   }
+
 
   Widget _buildQualityIndicator(String emoji, String label, double score) {
     final color = score >= 0.7
@@ -517,24 +648,40 @@ class _SmartCameraCaptureScreenState extends ConsumerState<SmartCameraCaptureScr
     
     return Column(
       children: [
-        Text(emoji, style: const TextStyle(fontSize: 24)),
-        const SizedBox(height: 4),
+        Text(emoji, style: const TextStyle(fontSize: 28)),
+        const SizedBox(height: 6),
         Text(
           label,
-          style: const TextStyle(color: Colors.white70, fontSize: 10),
-        ),
-        const SizedBox(height: 4),
-        SizedBox(
-          width: 60,
-          child: LinearProgressIndicator(
-            value: score,
-            backgroundColor: Colors.white24,
-            valueColor: AlwaysStoppedAnimation<Color>(color),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
           ),
         ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: 70,
+          height: 6,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: score,
+              backgroundColor: Colors.white24,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
         Text(
           '${(score * 100).toStringAsFixed(0)}%',
-          style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: color,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            shadows: const [
+              Shadow(color: Colors.black, blurRadius: 2),
+            ],
+          ),
         ),
       ],
     );

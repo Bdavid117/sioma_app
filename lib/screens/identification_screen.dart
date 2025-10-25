@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/identification_service.dart';
 import '../services/database_service.dart';
-import '../screens/camera_capture_screen.dart';
+import '../screens/smart_camera_capture_screen.dart';
 import '../models/person.dart';
 import '../utils/app_logger.dart';
 import '../providers/service_providers.dart';
@@ -86,15 +86,16 @@ class _IdentificationScreenState extends ConsumerState<IdentificationScreen> {
   Future<void> _captureAndIdentify() async {
     try {
       setState(() {
-        _statusMessage = 'Abriendo cámara...';
+        _statusMessage = 'Abriendo cámara inteligente...';
       });
 
       final imagePath = await Navigator.push<String>(
         context,
         MaterialPageRoute(
-          builder: (context) => CameraCaptureScreen(
+          builder: (context) => SmartCameraCaptureScreen(
             personName: 'Identificación',
             documentId: 'ID-${DateTime.now().millisecondsSinceEpoch}',
+            autoCapture: true, // Modo automático para mejor calidad
           ),
         ),
       );

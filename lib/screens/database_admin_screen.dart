@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/service_providers.dart';
+import '../services/database_service.dart';
 import '../utils/app_logger.dart';
 
 /// Pantalla de administración y optimización de la base de datos
@@ -12,7 +13,7 @@ class DatabaseAdminScreen extends ConsumerStatefulWidget {
 }
 
 class _DatabaseAdminScreenState extends ConsumerState<DatabaseAdminScreen> {
-  Map<String, dynamic>? _stats;
+  DatabaseStats? _stats;
   bool _isLoading = false;
   String? _statusMessage;
 
@@ -223,25 +224,25 @@ class _DatabaseAdminScreenState extends ConsumerState<DatabaseAdminScreen> {
                       children: [
                         _buildStatCard(
                           'Personas\nRegistradas',
-                          '${_stats!['persons_count'] ?? 0}',
+                          '${_stats!.personsCount}',
                           Icons.people,
                           Colors.blue,
                         ),
                         _buildStatCard(
                           'Eventos de\nIdentificación',
-                          '${_stats!['events_count'] ?? 0}',
+                          '${_stats!.eventsCount}',
                           Icons.event,
                           Colors.green,
                         ),
                         _buildStatCard(
                           'Análisis\nDetallados',
-                          '${_stats!['analysis_count'] ?? 0}',
+                          '${_stats!.analysisCount}',
                           Icons.analytics,
                           Colors.orange,
                         ),
                         _buildStatCard(
                           'Eventos\nPersonalizados',
-                          '${_stats!['custom_events_count'] ?? 0}',
+                          '${_stats!.customEventsCount}',
                           Icons.star,
                           Colors.purple,
                         ),
@@ -270,8 +271,8 @@ class _DatabaseAdminScreenState extends ConsumerState<DatabaseAdminScreen> {
                               ],
                             ),
                             const Divider(),
-                            _buildInfoRow('Tamaño de la BD', '${_stats!['database_size_mb']} MB'),
-                            _buildInfoRow('Total de registros', '${_stats!['total_records']}'),
+                            _buildInfoRow('Tamaño de la BD', '${_stats!.databaseSizeMB.toStringAsFixed(2)} MB'),
+                            _buildInfoRow('Total de registros', '${_stats!.totalRecords}'),
                             _buildInfoRow('Versión de esquema', '4'),
                           ],
                         ),

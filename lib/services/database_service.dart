@@ -427,7 +427,7 @@ class DatabaseService {
   }
 
   /// Obtiene estadísticas de la base de datos
-  Future<Map<String, dynamic>> getDatabaseStats() async {
+  Future<DatabaseStats> getDatabaseStats() async {
     try {
       final db = await database;
       
@@ -445,21 +445,21 @@ class DatabaseService {
       final sizeResult = await db.rawQuery('SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()');
       final dbSize = Sqflite.firstIntValue(sizeResult) ?? 0;
       
-      final stats = {
-        'persons_count': personsCount,
-        'events_count': eventsCount,
-        'analysis_count': analysisCount,
-        'custom_events_count': customEventsCount,
-        'database_size_bytes': dbSize,
-        'database_size_mb': (dbSize / (1024 * 1024)).toStringAsFixed(2),
-        'total_records': personsCount + eventsCount + analysisCount + customEventsCount,
-      };
+      final stats = DatabaseStats(
+        personsCount: personsCount,
+        eventsCount: eventsCount,
+        analysisCount: analysisCount,
+        customEventsCount: customEventsCount,
+        databaseSizeBytes: dbSize,
+        databaseSizeMB: (dbSize / (1024 * 1024)),
+        totalRecords: personsCount + eventsCount + analysisCount + customEventsCount,
+      );
       
-      DatabaseLogger.info('Database stats: $stats');
+      DatabaseLogger.info('Database stats: ${stats.toString()}');
       return stats;
     } catch (e) {
       DatabaseLogger.error('Error getting database stats', e);
-      return {};
+      return DatabaseStats.empty();
     }
   }
 
@@ -992,6 +992,50 @@ class DatabaseService {
     final path = join(databasePath, 'sioma_biometric.db');
     await databaseFactory.deleteDatabase(path);
     _database = null;
+  }
+}
+
+/// Estadísticas de la base de datos
+class DatabaseStats {
+  final int personsCount;
+  final int eventsCount;
+  final int analysisCount;
+  final int customEventsCount;
+  final int databaseSizeBytes;
+  final double databaseSizeMB;
+  final int totalRecords;
+
+  DatabaseStats({
+    required this.personsCount,
+    required this.eventsCount,
+    required this.analysisCount,
+    required this.customEventsCount,
+    required this.databaseSizeBytes,
+    required this.databaseSizeMB,
+    required this.totalRecords,
+  });
+
+  factory DatabaseStats.empty() {
+    return DatabaseStats(
+      personsCount: 0,
+      eventsCount: 0,
+      analysisCount: 0,
+      customEventsCount: 0,
+      databaseSizeBytes: 0,
+      databaseSizeMB: 0.0,
+      totalRecords: 0,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'DatabaseStats('
+        'persons: $personsCount, '
+        'events: $eventsCount, '
+        'analysis: $analysisCount, '
+        'customEvents: $customEventsCount, '
+        'size: ${databaseSizeMB.toStringAsFixed(2)}MB'
+        ')';
   }
 }
 

@@ -85,8 +85,8 @@ class FaceEmbeddingService {
       // Convertir a escala de grises para consistencia
       processed = img.grayscale(processed);
       
-      // Normalizar el contraste
-      processed = img.normalize(processed, 0, 255);
+      // Normalizar el contraste (0-255 rango estándar)
+      processed = img.normalize(processed, min: 0, max: 255);
       
       return processed;
     } catch (e) {
@@ -128,9 +128,10 @@ class FaceEmbeddingService {
       for (int x = 0; x < image.width; x += stepX) {
         try {
           final pixel = image.getPixel(x, y);
-          final r = img.getRed(pixel);
-          final g = img.getGreen(pixel);
-          final b = img.getBlue(pixel);
+          // En image 4.x, acceso directo a canales RGB
+          final r = pixel.r.toInt();
+          final g = pixel.g.toInt();
+          final b = pixel.b.toInt();
           
           // Combinación determinística más robusta
           hash = hash * 31 + r;

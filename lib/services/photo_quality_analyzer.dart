@@ -6,9 +6,9 @@ import '../utils/app_logger.dart';
 /// Servicio que analiza la calidad de fotos en tiempo real
 /// para determinar el momento óptimo de captura automática
 class PhotoQualityAnalyzer {
-  static const double _minBrightnessScore = 0.3;
-  static const double _maxBrightnessScore = 0.8;
-  static const double _optimalQualityThreshold = 0.75;
+  static const double _minBrightnessScore = 0.25; // Menos estricto
+  static const double _maxBrightnessScore = 0.85;
+  static const double _optimalQualityThreshold = 0.65; // Reducido de 0.75 a 0.65
 
   /// Analiza la calidad de una imagen capturada
   /// Retorna un score de 0.0 a 1.0 indicando qué tan buena es la foto
@@ -63,10 +63,10 @@ class PhotoQualityAnalyzer {
     for (int y = 0; y < image.height; y += 10) {
       for (int x = 0; x < image.width; x += 10) {
         final pixel = image.getPixel(x, y);
-        // En image 3.x, pixel es int, extraer RGB con shifts
-        final r = (pixel >> 16) & 0xFF;
-        final g = (pixel >> 8) & 0xFF;
-        final b = pixel & 0xFF;
+        // En image 4.x, pixel es Pixel object
+        final r = pixel.r.toInt();
+        final g = pixel.g.toInt();
+        final b = pixel.b.toInt();
         
         // Luminosidad percibida
         final brightness = (0.299 * r + 0.587 * g + 0.114 * b);
@@ -95,29 +95,37 @@ class PhotoQualityAnalyzer {
 
       int edgeStrength = 0;
       int edgeCount = 0;
+      int totalPixels = 0;
 
-      // Detector de bordes simple (Sobel aproximado)
-      for (int y = 1; y < grayscale.height - 1; y += 10) {
-        for (int x = 1; x < grayscale.width - 1; x += 10) {
-          final center = (grayscale.getPixel(x, y) >> 16) & 0xFF;
-          final right = (grayscale.getPixel(x + 1, y) >> 16) & 0xFF;
-          final down = (grayscale.getPixel(x, y + 1) >> 16) & 0xFF;
+      // Detector de bordes simple (Sobel aproximado) - muestreo más amplio
+      for (int y = 1; y < grayscale.height - 1; y += 8) { // Reducido de 10 a 8
+        for (int x = 1; x < grayscale.width - 1; x += 8) {
+          final center = grayscale.getPixel(x, y).r.toInt();
+          final right = grayscale.getPixel(x + 1, y).r.toInt();
+          final down = grayscale.getPixel(x, y + 1).r.toInt();
 
           final gradientX = (right - center).abs();
           final gradientY = (down - center).abs();
           final gradient = gradientX + gradientY;
 
-          if (gradient > 20) {
+          totalPixels++;
+          if (gradient > 15) { // Reducido umbral de 20 a 15 (menos estricto)
             edgeStrength += gradient;
             edgeCount++;
           }
         }
       }
 
-      if (edgeCount == 0) return 0.0;
+      if (edgeCount == 0 || totalPixels == 0) return 0.3; // Valor base en vez de 0.0
 
+      // Calcular score normalizado
+      final edgeRatio = edgeCount / totalPixels;
       final avgEdgeStrength = edgeStrength / edgeCount / 255.0;
-      return avgEdgeStrength.clamp(0.0, 1.0);
+      
+      // Combinar ratio de bordes con fuerza promedio
+      final sharpnessScore = (edgeRatio * 0.6 + avgEdgeStrength * 0.4) * 1.5; // Multiplicador para boost
+      
+      return sharpnessScore.clamp(0.0, 1.0);
     } catch (e) {
       CameraLogger.error('Error en análisis de nitidez', e);
       return 0.5; // Valor neutro en caso de error
@@ -132,9 +140,9 @@ class PhotoQualityAnalyzer {
     for (int y = 0; y < image.height; y += 10) {
       for (int x = 0; x < image.width; x += 10) {
         final pixel = image.getPixel(x, y);
-        final r = (pixel >> 16) & 0xFF;
-        final g = (pixel >> 8) & 0xFF;
-        final b = pixel & 0xFF;
+        final r = pixel.r.toInt();
+        final g = pixel.g.toInt();
+        final b = pixel.b.toInt();
         final luma = (0.299 * r + 0.587 * g + 0.114 * b).toInt();
         brightness.add(luma);
       }
@@ -156,10 +164,10 @@ class PhotoQualityAnalyzer {
 
   /// Calcula score de calidad combinado
   double _calculateQualityScore(double brightness, double sharpness, double contrast) {
-    // Pesos: nitidez es más importante para reconocimiento facial
-    const brightnessWeight = 0.30;
-    const sharpnessWeight = 0.50;
-    const contrastWeight = 0.20;
+    // Pesos ajustados: brillo más importante, nitidez menos estricta
+    const brightnessWeight = 0.45; // Aumentado de 0.30
+    const sharpnessWeight = 0.35; // Reducido de 0.50
+    const contrastWeight = 0.20; // Igual
 
     return (brightness * brightnessWeight) +
            (sharpness * sharpnessWeight) +

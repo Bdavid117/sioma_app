@@ -12,6 +12,7 @@ class CustomEvent {
   final String? notes; // Notas adicionales del usuario
   final String? photoPath; // Foto del momento del evento
   final Map<String, dynamic> metadata; // Datos adicionales
+  final double? confidence; // Nivel de confianza en identificación (0.0-1.0)
 
   CustomEvent({
     this.id,
@@ -24,7 +25,11 @@ class CustomEvent {
     this.notes,
     this.photoPath,
     this.metadata = const {},
+    this.confidence,
   });
+
+  // Getter de compatibilidad con código antiguo
+  String get documentId => personDocument;
 
   /// Convierte el modelo a mapa para almacenar en BD
   Map<String, dynamic> toMap() {
@@ -39,6 +44,7 @@ class CustomEvent {
       'notes': notes,
       'photo_path': photoPath,
       'metadata': _encodeMetadata(metadata),
+      'confidence': confidence,
     };
   }
 
@@ -55,6 +61,7 @@ class CustomEvent {
       notes: map['notes'],
       photoPath: map['photo_path'],
       metadata: _decodeMetadata(map['metadata']),
+      confidence: map['confidence']?.toDouble(),
     );
   }
 

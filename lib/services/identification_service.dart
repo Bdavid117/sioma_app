@@ -85,31 +85,31 @@ class IdentificationService {
   /// Identifica una persona comparando contra toda la base de datos
   Future<IdentificationResult> identifyPerson(
     String imagePath, {
-    double threshold = 0.50, // Reducido para embeddings simulados
+    double threshold = 0.65, // Ajustado para mejor balance
     int maxCandidates = 5,
     bool saveEvent = true,
   }) async {
     try {
-      BiometricLogger.info('Iniciando identificación 1:N para: $imagePath');
-      BiometricLogger.info('Umbral de confianza: ${(threshold * 100).toStringAsFixed(1)}%');
+      BiometricLogger.info('🔍 Iniciando identificación 1:N');
+      BiometricLogger.info('📊 Umbral de confianza: ${(threshold * 100).toStringAsFixed(1)}%');
       
       // Generar embedding de la imagen capturada
       final queryEmbedding = await _embeddingService.generateEmbedding(imagePath);
       if (queryEmbedding == null || queryEmbedding.isEmpty) {
-        BiometricLogger.warning('No se pudo generar embedding de la imagen');
+        BiometricLogger.warning('⚠️ No se pudo generar embedding de la imagen');
         return IdentificationResult.error('No se pudo generar embedding de la imagen');
       }
 
-      BiometricLogger.info('Embedding de consulta generado: ${queryEmbedding.length} dimensiones');
+      BiometricLogger.info('✅ Embedding generado: ${queryEmbedding.length}D');
 
       // Obtener todas las personas registradas
       final allPersons = await _dbService.getAllPersons(limit: 1000);
       if (allPersons.isEmpty) {
-        BiometricLogger.warning('No hay personas registradas en el sistema');
+        BiometricLogger.warning('📭 No hay personas registradas');
         return IdentificationResult.noMatch('No hay personas registradas en el sistema');
       }
 
-      BiometricLogger.info('Comparando contra ${allPersons.length} personas registradas');
+      BiometricLogger.info('👥 Comparando contra ${allPersons.length} personas');
 
       // Realizar comparación 1:N con validaciones múltiples
       final comparisonResults = <PersonSimilarity>[];
@@ -119,9 +119,9 @@ class IdentificationService {
           // Convertir embedding almacenado a lista de double
           final storedEmbedding = _parseEmbeddingFromJson(person.embedding);
 
-          // VALIDACIÓN 1: Verificar calidad de embeddings (reducido para compatibilidad)
-          if (queryEmbedding.length < 128 || storedEmbedding.length < 128) {
-            BiometricLogger.debug('Embedding insuficiente para ${person.name}: query=${queryEmbedding.length}, stored=${storedEmbedding.length}');
+          // VALIDACIÓN 1: Verificar calidad de embeddings
+          if (queryEmbedding.length < 100 || storedEmbedding.length < 100) {
+            BiometricLogger.debug('Embedding insuficiente para ${person.name}');
             continue;
           }
 
@@ -131,19 +131,18 @@ class IdentificationService {
           final manhattanSimilarity = _calculateManhattanSimilarity(queryEmbedding, storedEmbedding);
 
           // VALIDACIÓN 3: Combinar métricas con pesos optimizados
-          final combinedSimilarity = (cosineSimilarity * 0.7) +  // Mayor peso a coseno
-                                   (euclideanSimilarity * 0.2) + 
-                                   (manhattanSimilarity * 0.1);
+          final combinedSimilarity = (cosineSimilarity * 0.65) +  // Coseno (más confiable)
+                                   (euclideanSimilarity * 0.25) +  // Euclidean
+                                   (manhattanSimilarity * 0.10);   // Manhattan
 
           // VALIDACIÓN 4: Verificar consistencia entre métricas
-          final maxDiff = [cosineSimilarity, euclideanSimilarity, manhattanSimilarity]
-              .fold(0.0, (max, val) => max > val ? max : val) -
-              [cosineSimilarity, euclideanSimilarity, manhattanSimilarity]
-              .fold(1.0, (min, val) => min < val ? min : val);
+          final similarities = [cosineSimilarity, euclideanSimilarity, manhattanSimilarity];
+          final maxDiff = similarities.reduce((a, b) => a > b ? a : b) - 
+                          similarities.reduce((a, b) => a < b ? a : b);
 
-          // Si las métricas difieren mucho, es sospechoso
-          final isConsistent = maxDiff < 0.4; // Aumentado de 0.3 para ser menos estricto
-          final finalConfidence = isConsistent ? combinedSimilarity : combinedSimilarity * 0.85;
+          // Si las métricas difieren mucho, penalizar ligeramente
+          final isConsistent = maxDiff < 0.45; 
+          final finalConfidence = isConsistent ? combinedSimilarity : combinedSimilarity * 0.90;
 
           comparisonResults.add(PersonSimilarity(
             person: person,

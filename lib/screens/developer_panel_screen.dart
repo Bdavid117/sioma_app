@@ -5,6 +5,7 @@ import '../services/camera_service.dart';
 import 'database_test_screen.dart';
 import 'camera_test_screen.dart';
 import 'embedding_test_screen.dart';
+import 'features_demo_screen.dart';
 import 'main_navigation_screen.dart';
 
 /// Panel técnico con herramientas de desarrollador y debugging
@@ -78,6 +79,9 @@ class _DeveloperPanelScreenState extends State<DeveloperPanelScreen> {
         break;
       case 'embedding':
         targetScreen = const EmbeddingTestScreen();
+        break;
+      case 'demo':
+        targetScreen = const FeaturesDemoScreen();
         break;
       default:
         return;
@@ -287,7 +291,15 @@ class _DeveloperPanelScreenState extends State<DeveloperPanelScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Expanded(child: SizedBox()), // Espacio vacío
+                Expanded(
+                  child: _buildToolButton(
+                    'Demo Features',
+                    Icons.rocket_launch,
+                    Colors.purple,
+                    'Nuevas funcionalidades v2.0',
+                    () => _navigateToTool('demo'),
+                  ),
+                ),
               ],
             ),
           ],
