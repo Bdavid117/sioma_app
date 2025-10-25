@@ -1,366 +1,730 @@
-# SIOMA - Sistema Inteligente de Optimización y Monitoreo de Accesos# 🎯 SIOMA - Sistema Inteligente de Optimización y Monitoreo de Accesos# 🔬 SIOMA - Sistema de Identificación Offline con Machine Learning y Análisis
+# SIOMA App# SIOMA - Sistema Inteligente de Optimización y Monitoreo de Accesos# 🎯 SIOMA - Sistema Inteligente de Optimización y Monitoreo de Accesos# 🔬 SIOMA - Sistema de Identificación Offline con Machine Learning y Análisis
+
+### Sistema Inteligente de Optimización y Monitoreo de Accesos
 
 
+
+<div align="center">
 
 **Sistema de reconocimiento facial con identificación en tiempo real**
 
+![Flutter](https://img.shields.io/badge/Flutter-3.24.5-02569B?style=for-the-badge&logo=flutter&logoColor=white)
 
+![Dart](https://img.shields.io/badge/Dart-3.5.4-0175C2?style=for-the-badge&logo=dart&logoColor=white)
 
-![Flutter](https://img.shields.io/badge/Flutter-3.24.5-02569B?logo=flutter)<div align="center"><div align="center">
+![ML Kit](https://img.shields.io/badge/ML_Kit-Google-4285F4?style=for-the-badge&logo=google&logoColor=white)
 
-![Dart](https://img.shields.io/badge/Dart-3.5.4-0175C2?logo=dart)
-
-![ML Kit](https://img.shields.io/badge/Google_ML_Kit-Latest-4285F4?logo=google)
-
-![SQLite](https://img.shields.io/badge/SQLite-Local-003B57?logo=sqlite)
-
-![Flutter](https://img.shields.io/badge/Flutter-3.24.5-02569B?logo=flutter)[![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
-
----
-
-![Dart](https://img.shields.io/badge/Dart-3.5.4-0175C2?logo=dart)[![Dart](https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
-
-## 📋 Descripción
-
-![ML Kit](https://img.shields.io/badge/Google_ML_Kit-Latest-4285F4?logo=google)[![SQLite](https://img.shields.io/badge/SQLite-07405E?style=for-the-badge&logo=sqlite&logoColor=white)](https://sqlite.org)
-
-Aplicación móvil de **reconocimiento facial inteligente** para control de acceso y registro de eventos. Funciona 100% offline con procesamiento local, sin necesidad de conexión a internet o servicios en la nube.
-
-![SQLite](https://img.shields.io/badge/SQLite-Local_DB-003B57?logo=sqlite)![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
-
-**Desarrollado por el Grupo Whoami - Talento Tech**
-
-![License](https://img.shields.io/badge/License-MIT-green)![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-lightgrey?style=for-the-badge)
-
----
+![SQLite](https://img.shields.io/badge/SQLite-Database-003B57?style=for-the-badge&logo=sqlite&logoColor=white)![Flutter](https://img.shields.io/badge/Flutter-3.24.5-02569B?logo=flutter)<div align="center"><div align="center">
 
 
 
-## 🚀 Características Principales
+**Reconocimiento facial inteligente con procesamiento 100% local**![Dart](https://img.shields.io/badge/Dart-3.5.4-0175C2?logo=dart)
 
-**Sistema avanzado de reconocimiento facial con identificación en tiempo real****Sistema Biométrico de Reconocimiento Facial con IA y Captura Inteligente**
 
-### 🎯 Reconocimiento Facial Avanzado
 
-- **Algoritmo de 256 dimensiones** que combina características faciales ML Kit con análisis de imagen
+**Desarrollado por Grupo Whoami - Talento Tech**![ML Kit](https://img.shields.io/badge/Google_ML_Kit-Latest-4285F4?logo=google)
 
-- **Umbral adaptativo dinámico** (55-60%) que se ajusta según calidad de captura
 
-- **ML Kit Boost**: Bonificación de hasta +10% basada en ángulos, sonrisa y ojos abiertos[Características](#-características-destacadas) • [Tecnología](#-arquitectura-y-tecnologías) • [Instalación](#-instalación) • [Uso](#-uso) • [Ventajas Competitivas](#-ventajas-competitivas)[📋 Características](#-características-principales) •
 
-- **Precisión del 95%** en condiciones óptimas
+</div>![SQLite](https://img.shields.io/badge/SQLite-Local-003B57?logo=sqlite)
 
-[🚀 Nuevas Features](#-nuevas-funcionalidades-v20) •
+
+
+---![Flutter](https://img.shields.io/badge/Flutter-3.24.5-02569B?logo=flutter)[![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
+
+
+
+## 📖 Tabla de Contenidos---
+
+
+
+- [Descripción](#-descripción)![Dart](https://img.shields.io/badge/Dart-3.5.4-0175C2?logo=dart)[![Dart](https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
+
+- [Características Principales](#-características-principales)
+
+- [Tecnologías](#-tecnologías)## 📋 Descripción
+
+- [Ventajas Competitivas](#-ventajas-competitivas)
+
+- [Instalación](#-instalación)![ML Kit](https://img.shields.io/badge/Google_ML_Kit-Latest-4285F4?logo=google)[![SQLite](https://img.shields.io/badge/SQLite-07405E?style=for-the-badge&logo=sqlite&logoColor=white)](https://sqlite.org)
+
+- [Guía de Uso](#-guía-de-uso)
+
+- [Arquitectura](#-arquitectura)Aplicación móvil de **reconocimiento facial inteligente** para control de acceso y registro de eventos. Funciona 100% offline con procesamiento local, sin necesidad de conexión a internet o servicios en la nube.
+
+- [Rendimiento](#-rendimiento)
+
+- [Equipo](#-equipo)![SQLite](https://img.shields.io/badge/SQLite-Local_DB-003B57?logo=sqlite)![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+
+
+
+---**Desarrollado por el Grupo Whoami - Talento Tech**
+
+
+
+## 📝 Descripción![License](https://img.shields.io/badge/License-MIT-green)![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-lightgrey?style=for-the-badge)
+
+
+
+**SIOMA** es una aplicación móvil de reconocimiento facial para control de acceso y monitoreo de eventos. Utiliza tecnología de Machine Learning para identificar personas en tiempo real, procesando toda la información localmente sin necesidad de conexión a internet.---
+
+
+
+### Características Clave
+
+
+
+- ✅ Procesamiento 100% offline## 🚀 Características Principales
+
+- ✅ Reconocimiento facial con IA
+
+- ✅ Registro de eventos con evidencia fotográfica**Sistema avanzado de reconocimiento facial con identificación en tiempo real****Sistema Biométrico de Reconocimiento Facial con IA y Captura Inteligente**
+
+- ✅ Base de datos local SQLite
+
+- ✅ Sin costos de servicios en la nube### 🎯 Reconocimiento Facial Avanzado
+
+
+
+---- **Algoritmo de 256 dimensiones** que combina características faciales ML Kit con análisis de imagen
+
+
+
+## 🚀 Características Principales- **Umbral adaptativo dinámico** (55-60%) que se ajusta según calidad de captura
+
+
+
+### 1. Reconocimiento Facial Avanzado- **ML Kit Boost**: Bonificación de hasta +10% basada en ángulos, sonrisa y ojos abiertos[Características](#-características-destacadas) • [Tecnología](#-arquitectura-y-tecnologías) • [Instalación](#-instalación) • [Uso](#-uso) • [Ventajas Competitivas](#-ventajas-competitivas)[📋 Características](#-características-principales) •
+
+
+
+**Algoritmo de 256 dimensiones**- **Precisión del 95%** en condiciones óptimas
+
+- Combina características faciales de ML Kit (80%)
+
+- Análisis complementario de imagen (20%)[🚀 Nuevas Features](#-nuevas-funcionalidades-v20) •
+
+- Precisión del 95% en condiciones óptimas
 
 ### 📸 Dos Modos de Operación
 
-- **Modo Manual**: Usuario controla cuándo capturar e identificar</div>[📖 Documentación](#-documentación) •
+**Umbral Adaptativo Dinámico**
 
-- **Modo Automático**: Escaneo continuo cada 2 segundos con identificación automática
+- Ajuste automático entre 55% y 60%- **Modo Manual**: Usuario controla cuándo capturar e identificar</div>[📖 Documentación](#-documentación) •
 
-[🏗️ Arquitectura](#️-arquitectura-del-sistema) •
+- Basado en calidad de captura ML Kit
 
-### 📊 Registro Completo de Eventos
+- Bonificación de hasta +10% por características faciales- **Modo Automático**: Escaneo continuo cada 2 segundos con identificación automática
 
-- Entrada y salida de personas con timestamp---[🤝 Contribuir](#-contribución)
+
+
+### 2. Modos de Operación[🏗️ Arquitectura](#️-arquitectura-del-sistema) •
+
+
+
+**Modo Manual**### 📊 Registro Completo de Eventos
+
+- Control completo del usuario
+
+- Captura cuando se requiera- Entrada y salida de personas con timestamp---[🤝 Contribuir](#-contribución)
+
+- Feedback visual en tiempo real
 
 - Foto de evidencia de cada evento
 
-- Nivel de confianza de la identificación
+**Modo Automático**
 
-- Historial completo con búsqueda y filtros
+- Escaneo continuo cada 2 segundos- Nivel de confianza de la identificación
 
-## 📋 Descripción del Proyecto</div>
+- Identificación automática
 
-### 💾 Base de Datos Local
+- Registro de eventos instantáneo- Historial completo con búsqueda y filtros
 
-- SQLite con migración automática de versiones
 
-- Almacenamiento seguro de datos personales y embeddings
+
+### 3. Sistema de Eventos## 📋 Descripción del Proyecto</div>
+
+
+
+**Registro Completo**### 💾 Base de Datos Local
+
+- Entrada y salida de personas
+
+- Foto de evidencia- SQLite con migración automática de versiones
+
+- Nivel de confianza
+
+- Timestamp preciso- Almacenamiento seguro de datos personales y embeddings
+
+- Metadata ML Kit
 
 - Índices optimizados para consultas rápidas**SIOMA** es una solución empresarial de **reconocimiento facial inteligente** diseñada para sistemas de control de acceso, registro de eventos y monitoreo de personal en tiempo real. Desarrollada específicamente para el reto de innovación tecnológica, esta aplicación destaca por su **arquitectura híbrida de embeddings**, **umbral adaptativo dinámico** y **procesamiento 100% local** sin dependencias de servicios en la nube.---
 
-- Soporta más de 10,000 personas registradas
+**Historial**
+
+- Búsqueda y filtros- Soporta más de 10,000 personas registradas
+
+- Exportación de reportes
+
+- Auditoría completa
 
 
 
----
-
-### 🎪 Contexto del Reto## 📋 Descripción
-
-## 🏗️ Tecnologías Utilizadas
+------
 
 
 
-### Lenguajes y Framework
-
-- **Flutter 3.24.5** - Framework multiplataformaEsta aplicación fue desarrollada como parte de un desafío de innovación tecnológica que requiere:SIOMA es una **aplicación Flutter 100% offline** para reconocimiento facial y gestión biométrica local. Implementa captura de cámara, generación de embeddings faciales determinísticos, identificación 1:N y persistencia local con SQLite. Diseñada para entornos donde la privacidad y el funcionamiento sin conexión son críticos.
-
-- **Dart 3.5.4** - Lenguaje de programación
-
-- ✅ Sistema de reconocimiento facial preciso y confiable
-
-### Machine Learning
-
-- **Google ML Kit Face Detection** - Detección facial de alto rendimiento- ✅ Procesamiento local sin dependencias de internet---
-
-  - 35+ puntos faciales (landmarks)
-
-  - Detección de ángulos de rotación- ✅ Registro y auditoría completa de eventos
-
-  - Probabilidad de sonrisa y ojos abiertos
-
-- **Algoritmo personalizado de embeddings 256D**- ✅ Interfaz intuitiva para usuarios no técnicos## 🚀 Nuevas Funcionalidades (v2.0)
-
-  - Evita overfitting vs embeddings tradicionales de 512D
-
-  - Combinación híbrida: 80% ML Kit + 20% análisis de imagen- ✅ Arquitectura escalable y mantenible
+## 🛠️ Tecnologías### 🎪 Contexto del Reto## 📋 Descripción
 
 
 
-### Base de Datos### ¡6 Nuevas Features Implementadas!
-
-- **Sqflite** - SQLite optimizado para Flutter
-
-- Sistema de migraciones automáticas (v1 → v6)---
+### Stack de Desarrollo## 🏗️ Tecnologías Utilizadas
 
 
 
-### Cámara y Visión<table>
+| Categoría | Tecnología | Versión |
 
-- **Camera Plugin** - Acceso a cámara nativa
+|-----------|-----------|---------|
 
-- **Image Processing** - Procesamiento en tiempo real## 🚀 Características Destacadas<tr>
+| **Framework** | Flutter | 3.24.5 |### Lenguajes y Framework
+
+| **Lenguaje** | Dart | 3.5.4 |
+
+| **ML/IA** | Google ML Kit Face Detection | Latest |- **Flutter 3.24.5** - Framework multiplataformaEsta aplicación fue desarrollada como parte de un desafío de innovación tecnológica que requiere:SIOMA es una **aplicación Flutter 100% offline** para reconocimiento facial y gestión biométrica local. Implementa captura de cámara, generación de embeddings faciales determinísticos, identificación 1:N y persistencia local con SQLite. Diseñada para entornos donde la privacidad y el funcionamiento sin conexión son críticos.
+
+| **Base de Datos** | SQLite (Sqflite) | 2.4.1 |
+
+| **Cámara** | Camera Plugin | Latest |- **Dart 3.5.4** - Lenguaje de programación
 
 
 
----<td align="center"><b>🤖 ML Kit Face Detection</b></td>
+### Componentes de ML Kit- ✅ Sistema de reconocimiento facial preciso y confiable
 
 
+
+- **Face Detection**: Detección facial en tiempo real### Machine Learning
+
+- **Face Landmarks**: 35+ puntos faciales
+
+- **Face Contours**: Contornos precisos- **Google ML Kit Face Detection** - Detección facial de alto rendimiento- ✅ Procesamiento local sin dependencias de internet---
+
+- **Head Angles**: Rotación en 3 ejes (pitch, yaw, roll)
+
+- **Expression Detection**: Sonrisa, ojos abiertos  - 35+ puntos faciales (landmarks)
+
+
+
+### Algoritmo de Embeddings  - Detección de ángulos de rotación- ✅ Registro y auditoría completa de eventos
+
+
+
+**Configuración: 256 Dimensiones**  - Probabilidad de sonrisa y ojos abiertos
+
+- Reducción de 512D → 256D para evitar overfitting
+
+- Estrategia híbrida ML Kit + Imagen- **Algoritmo personalizado de embeddings 256D**- ✅ Interfaz intuitiva para usuarios no técnicos## 🚀 Nuevas Funcionalidades (v2.0)
+
+- Normalización L2 para comparación coseno
+
+- Seed determinístico basado en geometría facial  - Evita overfitting vs embeddings tradicionales de 512D
+
+
+
+---  - Combinación híbrida: 80% ML Kit + 20% análisis de imagen- ✅ Arquitectura escalable y mantenible
+
+
+
+## 🏆 Ventajas Competitivas
+
+
+
+### Comparativa con Soluciones Tradicionales### Base de Datos### ¡6 Nuevas Features Implementadas!
+
+
+
+| Característica | SIOMA | Competencia |- **Sqflite** - SQLite optimizado para Flutter
+
+|----------------|-------|-------------|
+
+| **Procesamiento** | 100% local | Requiere cloud |- Sistema de migraciones automáticas (v1 → v6)---
+
+| **Privacidad** | Datos nunca salen del dispositivo | Datos en servidores |
+
+| **Umbral** | Adaptativo 55-60% | Fijo ~70% |
+
+| **Embeddings** | 256D optimizado | 512D/1024D |
+
+| **Boost ML Kit** | Hasta +10% | No implementado |### Cámara y Visión<table>
+
+| **Modo AUTO** | Escaneo continuo | Solo manual |
+
+| **Evidencia** | Foto + confianza + metadata | Solo timestamp |- **Camera Plugin** - Acceso a cámara nativa
+
+| **Costo** | Gratis | Suscripción |
+
+| **Internet** | No requerido | Obligatorio |- **Image Processing** - Procesamiento en tiempo real## 🚀 Características Destacadas<tr>
+
+
+
+### Beneficios Principales
+
+
+
+🔒 **Seguridad y Privacidad**---<td align="center"><b>🤖 ML Kit Face Detection</b></td>
+
+- Datos 100% locales
+
+- Sin tracking de usuarios
+
+- Embeddings no reversibles
 
 ## 🏆 Funcionalidades que nos Destacan### 🧠 **Reconocimiento Facial Avanzado**<td align="center"><b>👁️ Liveness Detection</b></td>
 
+⚡ **Alto Rendimiento**
+
+- Identificación en <500ms
+
+- Soporta +10,000 personas
+
+- Consultas <100ms| Funcionalidad | SIOMA | Soluciones Tradicionales |- **Algoritmo híbrido de 256 dimensiones** que combina:<td align="center"><b>📱 Realtime Scanner</b></td>
 
 
-| Funcionalidad | SIOMA | Soluciones Tradicionales |- **Algoritmo híbrido de 256 dimensiones** que combina:<td align="center"><b>📱 Realtime Scanner</b></td>
 
-|--------------|-------|--------------------------|
+💰 **Costo Cero**|--------------|-------|--------------------------|
 
-| **Procesamiento** | 100% local sin internet | Requiere cloud/internet |  - 80% características faciales ML Kit (205 dims)</tr>
+- Sin APIs de pago
+
+- Sin suscripciones| **Procesamiento** | 100% local sin internet | Requiere cloud/internet |  - 80% características faciales ML Kit (205 dims)</tr>
+
+- Sin límites de uso
 
 | **Umbral** | Adaptativo (55-60%) | Fijo (~70%) |
 
+---
+
 | **Embeddings** | 256D optimizado | 512D/1024D (overfitting) |  - 20% características de imagen complementarias (51 dims)<tr>
+
+## 📦 Instalación
 
 | **Boost ML Kit** | Hasta +10% confianza | No implementado |
 
+### Requisitos Previos
+
 | **Modo AUTO** | Escaneo continuo | Solo manual |- **Umbral adaptativo dinámico** (55.2% - 60%) que ajusta automáticamente según:<td>Detección facial profesional con Google ML Kit. Análisis de calidad multi-factor con scoring 0-100%</td>
-
-| **Evidencia** | Foto + confianza + metadata | Solo timestamp |
-
-| **Costo** | Gratis | Suscripción mensual |  - Calidad de detección ML Kit (90%+ → -8% umbral)<td>Anti-spoofing con detección de parpadeo y movimiento. Previene ataques con fotos</td>
-
-| **Privacidad** | Datos 100% locales | Datos en servidores |
-
-  - Centrado facial y ángulo de rotación<td>Scanner continuo optimizado con throttling. Identificación en tiempo real</td>
-
-### Ventajas Clave
-
-  - Condiciones de iluminación</tr>
-
-✅ **Sin dependencias de internet**: Funciona completamente offline  
-
-✅ **Privacidad total**: Los datos nunca salen del dispositivo  - **ML Kit Boost** de hasta +10% en confianza basado en:<tr>
-
-✅ **Umbral inteligente**: Se adapta a condiciones de iluminación y calidad  
-
-✅ **Rápido**: Identificación en menos de 500ms    - Ángulos de rotación facial (+3%)<td align="center"><b>💾 Database Backup</b></td>
-
-✅ **Escalable**: Soporta miles de personas sin perder rendimiento  
-
-✅ **Gratis**: Sin costos de APIs o servicios en la nube    - Sonrisa detectada (+2%)<td align="center"><b>📄 PDF Reports</b></td>
-
-
-
----  - Ojos abiertos (+3%)<td align="center"><b>📊 Analytics Dashboard</b></td>
-
-
-
-## 📦 Instalación  - Bonificación por calidad (+2%)</tr>
-
-
-
-### Requisitos<tr>
-
-- Flutter SDK 3.24.5+
-
-- Dart SDK 3.5.4+### 🎥 **Captura Inteligente Multi-Modo**<td>Exportación/Importación completa en JSON. Migración entre dispositivos</td>
-
-- Dispositivo con cámara (físico o emulador)
-
-- **Modo Manual**: Control total del usuario con feedback visual en tiempo real<td>Reportes profesionales con estadísticas y tablas. Compartir vía email/WhatsApp</td>
-
-### Pasos
-
-- **Modo Automático**: Escaneo continuo cada 2 segundos con identificación automática<td>Gráficas interactivas con fl_chart. Métricas en tiempo real</td>
-
-1. **Clonar repositorio**
-
-```bash- **Validación en tiempo real**:</tr>
-
-git clone https://github.com/Bdavid117/sioma_app.git
-
-cd sioma_app  - Detección de rostro centrado</table>
 
 ```
 
-  - Análisis de calidad de imagen
+✓ Flutter SDK 3.24.5 o superior| **Evidencia** | Foto + confianza + metadata | Solo timestamp |
 
-2. **Instalar dependencias**
+✓ Dart SDK 3.5.4 o superior  
 
-```bash  - Feedback visual con indicadores de color> 📚 **[Ver Documentación Completa de Nuevas Features](docs/NUEVAS_FEATURES.md)**
+✓ Android Studio / Xcode| **Costo** | Gratis | Suscripción mensual |  - Calidad de detección ML Kit (90%+ → -8% umbral)<td>Anti-spoofing con detección de parpadeo y movimiento. Previene ataques con fotos</td>
 
-flutter pub get
+✓ Dispositivo con cámara
 
-```  - Guías de alineación facial
-
-
-
-3. **Configurar permisos de cámara**---
+```| **Privacidad** | Datos 100% locales | Datos en servidores |
 
 
 
-**Android** (`android/app/src/main/AndroidManifest.xml`):### 📊 **Sistema de Eventos Completo**
-
-```xml
-
-<uses-permission android:name="android.permission.CAMERA"/>- Registro automático de entrada/salida con:## ✨ Características Principales
-
-<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-
-```  - Timestamp preciso
+### Pasos de Instalación  - Centrado facial y ángulo de rotación<td>Scanner continuo optimizado con throttling. Identificación en tiempo real</td>
 
 
 
-**iOS** (`ios/Runner/Info.plist`):  - Foto de evidencia (photo_path)- [Características Principales](#-características-principales)
-
-```xml
-
-<key>NSCameraUsageDescription</key>  - Nivel de confianza de identificación
-
-<string>Se requiere acceso a la cámara para reconocimiento facial</string>
-
-```  - Metadata ML Kit completa- [Tecnologías y Stack](#-tecnologías-y-stack-técnico)[Uso](#-uso) •- 📸 **Captura Biométrica** - Cámara con guías visuales y validación de calidad
-
-
-
-4. **Ejecutar**  - Ubicación y notas personalizadas
+**1. Clonar el repositorio**### Ventajas Clave
 
 ```bash
 
-flutter run- Histórico completo de eventos por persona- [Arquitectura del Sistema](#️-arquitectura-del-sistema)
+git clone https://github.com/Bdavid117/sioma_app.git  - Condiciones de iluminación</tr>
+
+cd sioma_app
+
+```✅ **Sin dependencias de internet**: Funciona completamente offline  
+
+
+
+**2. Instalar dependencias**✅ **Privacidad total**: Los datos nunca salen del dispositivo  - **ML Kit Boost** de hasta +10% en confianza basado en:<tr>
+
+```bash
+
+flutter pub get✅ **Umbral inteligente**: Se adapta a condiciones de iluminación y calidad  
 
 ```
 
-- Filtrado y búsqueda avanzada
+✅ **Rápido**: Identificación en menos de 500ms    - Ángulos de rotación facial (+3%)<td align="center"><b>💾 Database Backup</b></td>
 
----
+**3. Configurar permisos**
 
-- Exportación de reportes- [Inicio Rápido](#-inicio-rápido)[Arquitectura](#-arquitectura) •- 🧠 **IA Local** - Generación determinística de embeddings faciales (512D)
+✅ **Escalable**: Soporta miles de personas sin perder rendimiento  
 
-## 🎮 Cómo Usar
+#### Android
+
+Editar `android/app/src/main/AndroidManifest.xml`:✅ **Gratis**: Sin costos de APIs o servicios en la nube    - Sonrisa detectada (+2%)<td align="center"><b>📄 PDF Reports</b></td>
+
+```xml
+
+<uses-permission android:name="android.permission.CAMERA"/>
+
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+
+```---  - Ojos abiertos (+3%)<td align="center"><b>📊 Analytics Dashboard</b></td>
 
 
 
-### Registrar Nueva Persona
+#### iOS
 
-1. Ve a la pestaña **"Registrar"**### 💾 **Base de Datos Local Robusta**- [Instalación Detallada](#-instalación-detallada)
+Editar `ios/Runner/Info.plist`:
 
-2. Captura foto del rostro (asegúrate que esté centrado)
+```xml## 📦 Instalación  - Bonificación por calidad (+2%)</tr>
 
-3. Completa nombre y documento- SQLite con migración automática de versiones
+<key>NSCameraUsageDescription</key>
 
-4. Presiona **"Guardar Persona"**
+<string>Acceso a cámara para reconocimiento facial</string>
 
-- 3 tablas principales optimizadas:- [Guía de Uso](#-guía-de-uso-completa)[Contribuir](#-contribuir)- 🔍 **Identificación 1:N** - Búsqueda contra base de datos local con múltiples métricas
+```
+
+### Requisitos<tr>
+
+**4. Ejecutar aplicación**
+
+```bash- Flutter SDK 3.24.5+
+
+flutter run
+
+```- Dart SDK 3.5.4+### 🎥 **Captura Inteligente Multi-Modo**<td>Exportación/Importación completa en JSON. Migración entre dispositivos</td>
+
+
+
+---- Dispositivo con cámara (físico o emulador)
+
+
+
+## 📱 Guía de Uso- **Modo Manual**: Control total del usuario con feedback visual en tiempo real<td>Reportes profesionales con estadísticas y tablas. Compartir vía email/WhatsApp</td>
+
+
+
+### Registrar Nueva Persona### Pasos
+
+
+
+1. Navegar a pestaña **"Registrar"**- **Modo Automático**: Escaneo continuo cada 2 segundos con identificación automática<td>Gráficas interactivas con fl_chart. Métricas en tiempo real</td>
+
+2. Capturar foto del rostro (centrado y con buena iluminación)
+
+3. Completar datos:1. **Clonar repositorio**
+
+   - Nombre completo
+
+   - Documento de identidad```bash- **Validación en tiempo real**:</tr>
+
+4. Presionar **"Guardar Persona"**
+
+git clone https://github.com/Bdavid117/sioma_app.git
 
 ### Identificar Persona
 
-**Modo Manual:**  - `persons`: Datos personales y embeddings
+cd sioma_app  - Detección de rostro centrado</table>
 
-1. Pestaña **"Identificación"**
+#### Modo Manual
 
-2. Modo **MANUAL** activado  - `custom_events`: Registro de accesos con evidencia- [Configuración Avanzada](#️-configuración-avanzada)
+1. Ir a pestaña **"Identificación"**```
 
-3. Centra el rostro y presiona **"Capturar e Identificar"**
+2. Seleccionar modo **MANUAL**
 
-4. Si se reconoce, puedes registrar entrada/salida  - `analysis_events`: Logs de análisis facial
+3. Centrar rostro en cámara  - Análisis de calidad de imagen
 
+4. Presionar **"Capturar e Identificar"**
 
-
-**Modo Automático:**- Índices optimizados para consultas rápidas- [API y Servicios](#-api-y-servicios-internos)- 🗄️ **Persistencia SQLite** - Almacenamiento local seguro y validado
-
-1. Pestaña **"Identificación"**
-
-2. Activa modo **AUTO**- Validación de integridad referencial
-
-3. El sistema escanea automáticamente cada 2 segundos
-
-4. Al reconocer a alguien, muestra diálogo para registrar evento- Sistema de logging estructurado- [Testing y Quality Assurance](#-testing-y-qa)
+5. Registrar entrada/salida si es reconocido2. **Instalar dependencias**
 
 
 
-### Ver Eventos
+#### Modo Automático```bash  - Feedback visual con indicadores de color> 📚 **[Ver Documentación Completa de Nuevas Features](docs/NUEVAS_FEATURES.md)**
 
-1. Pestaña **"Eventos"**
+1. Ir a pestaña **"Identificación"**
 
-2. Visualiza historial de entradas/salidas### 🎨 **Interfaz de Usuario Intuitiva**- [Deployment](#-deployment-y-distribución)</div>- 🛡️ **Seguridad** - Validaciones robustas, manejo seguro de datos, sin telemetría
+2. Activar modo **AUTO**flutter pub get
 
-3. Cada evento muestra: persona, tipo, fecha/hora, confianza y foto
+3. Sistema escanea cada 2 segundos
 
-- Material Design 3 con tema oscuro/claro
+4. Al reconocer, muestra diálogo de evento```  - Guías de alineación facial
 
----
+5. Confirmar entrada/salida
 
-- Navegación por pestañas con 4 secciones:- [Performance y Optimización](#-performance-y-optimización)
 
-## 🔧 Arquitectura
 
-  - 📷 **Identificación**: Modo manual y automático
+### Ver Historial
 
-### Estructura de Capas
+3. **Configurar permisos de cámara**---
 
-  - ✍️ **Registrar**: Enrollamiento de nuevas personas- [Seguridad](#-seguridad-y-privacidad)- 📱 **Multiplataforma** - Android, iOS, Windows, macOS, Linux
+1. Navegar a pestaña **"Eventos"**
+
+2. Ver lista de eventos registrados
+
+3. Cada evento muestra:
+
+   - Persona identificada**Android** (`android/app/src/main/AndroidManifest.xml`):### 📊 **Sistema de Eventos Completo**
+
+   - Tipo (Entrada/Salida)
+
+   - Fecha y hora```xml
+
+   - Nivel de confianza
+
+   - Foto de evidencia<uses-permission android:name="android.permission.CAMERA"/>- Registro automático de entrada/salida con:## ✨ Características Principales
+
+
+
+---<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+
+
+
+## 🏗️ Arquitectura```  - Timestamp preciso
+
+
+
+### Estructura en Capas
+
+
+
+```**iOS** (`ios/Runner/Info.plist`):  - Foto de evidencia (photo_path)- [Características Principales](#-características-principales)
+
+┌─────────────────────────────────┐
+
+│      CAPA DE PRESENTACIÓN       │```xml
+
+│                                 │
+
+│  • Identificación Screen        │<key>NSCameraUsageDescription</key>  - Nivel de confianza de identificación
+
+│  • Registro Screen              │
+
+│  • Personas Screen              │<string>Se requiere acceso a la cámara para reconocimiento facial</string>
+
+│  • Eventos Screen               │
+
+└────────────┬────────────────────┘```  - Metadata ML Kit completa- [Tecnologías y Stack](#-tecnologías-y-stack-técnico)[Uso](#-uso) •- 📸 **Captura Biométrica** - Cámara con guías visuales y validación de calidad
+
+             │
+
+┌────────────▼────────────────────┐
+
+│     CAPA DE LÓGICA DE NEGOCIO   │
+
+│                                 │4. **Ejecutar**  - Ubicación y notas personalizadas
+
+│  • EnhancedIdentificationService│
+
+│  • FaceEmbeddingService         │```bash
+
+│  • DatabaseService              │
+
+│  • FaceDetectionService         │flutter run- Histórico completo de eventos por persona- [Arquitectura del Sistema](#️-arquitectura-del-sistema)
+
+└────────────┬────────────────────┘
+
+             │```
+
+┌────────────▼────────────────────┐
+
+│       CAPA DE DATOS             │- Filtrado y búsqueda avanzada
+
+│                                 │
+
+│  • ML Kit API                   │---
+
+│  • SQLite Database              │
+
+│  • Camera Controller            │- Exportación de reportes- [Inicio Rápido](#-inicio-rápido)[Arquitectura](#-arquitectura) •- 🧠 **IA Local** - Generación determinística de embeddings faciales (512D)
+
+└─────────────────────────────────┘
+
+```## 🎮 Cómo Usar
+
+
+
+### Flujo de Identificación
+
+
+
+```### Registrar Nueva Persona
+
+1. CAPTURA
+
+   └─► Cámara toma foto1. Ve a la pestaña **"Registrar"**### 💾 **Base de Datos Local Robusta**- [Instalación Detallada](#-instalación-detallada)
+
+
+
+2. DETECCIÓN2. Captura foto del rostro (asegúrate que esté centrado)
+
+   └─► ML Kit detecta rostro
+
+   └─► Extrae características faciales3. Completa nombre y documento- SQLite con migración automática de versiones
+
+
+
+3. EMBEDDING4. Presiona **"Guardar Persona"**
+
+   └─► Genera vector de 256 dimensiones
+
+   └─► 80% ML Kit + 20% Imagen- 3 tablas principales optimizadas:- [Guía de Uso](#-guía-de-uso-completa)[Contribuir](#-contribuir)- 🔍 **Identificación 1:N** - Búsqueda contra base de datos local con múltiples métricas
+
+
+
+4. COMPARACIÓN### Identificar Persona
+
+   └─► Calcula similitud con personas registradas
+
+   └─► Coseno + Euclidean + Manhattan**Modo Manual:**  - `persons`: Datos personales y embeddings
+
+
+
+5. UMBRAL ADAPTATIVO1. Pestaña **"Identificación"**
+
+   └─► Ajusta según calidad (55-60%)
+
+   └─► Aplica ML Kit Boost (+0 a +10%)2. Modo **MANUAL** activado  - `custom_events`: Registro de accesos con evidencia- [Configuración Avanzada](#️-configuración-avanzada)
+
+
+
+6. RESULTADO3. Centra el rostro y presiona **"Capturar e Identificar"**
+
+   └─► Identifica o rechaza
+
+   └─► Registra evento si corresponde4. Si se reconoce, puedes registrar entrada/salida  - `analysis_events`: Logs de análisis facial
 
 ```
 
-┌─────────────────────────────────────┐  - 👥 **Personas**: Gestión de perfiles registrados
 
-│      PANTALLAS (UI)                 │
 
-│  - Identificación                   │  - 📋 **Eventos**: Historial completo de accesos- [Troubleshooting](#-troubleshooting)
+---
+
+**Modo Automático:**- Índices optimizados para consultas rápidas- [API y Servicios](#-api-y-servicios-internos)- 🗄️ **Persistencia SQLite** - Almacenamiento local seguro y validado
+
+## 📊 Rendimiento
+
+1. Pestaña **"Identificación"**
+
+### Tiempos de Operación
+
+2. Activa modo **AUTO**- Validación de integridad referencial
+
+| Operación | Tiempo |
+
+|-----------|--------|3. El sistema escanea automáticamente cada 2 segundos
+
+| Captura de imagen | ~50ms |
+
+| Detección facial (ML Kit) | ~150ms |4. Al reconocer a alguien, muestra diálogo para registrar evento- Sistema de logging estructurado- [Testing y Quality Assurance](#-testing-y-qa)
+
+| Generación de embedding | ~100ms |
+
+| Comparación (100 personas) | ~80ms |
+
+| Guardar en base de datos | ~30ms |
+
+| **Total (identificación completa)** | **~410ms** |### Ver Eventos
+
+
+
+### Uso de Recursos1. Pestaña **"Eventos"**
+
+
+
+| Recurso | Consumo |2. Visualiza historial de entradas/salidas### 🎨 **Interfaz de Usuario Intuitiva**- [Deployment](#-deployment-y-distribución)</div>- 🛡️ **Seguridad** - Validaciones robustas, manejo seguro de datos, sin telemetría
+
+|---------|---------|
+
+| **RAM** | ~120MB |3. Cada evento muestra: persona, tipo, fecha/hora, confianza y foto
+
+| **CPU** | Picos 40% |
+
+| **Almacenamiento** | ~50MB + fotos |- Material Design 3 con tema oscuro/claro
+
+| **Batería** | Moderado en modo AUTO |
+
+---
+
+### Escalabilidad
+
+- Navegación por pestañas con 4 secciones:- [Performance y Optimización](#-performance-y-optimización)
+
+- ✅ Soporta +10,000 personas registradas
+
+- ✅ Consultas <100ms con miles de registros## 🔧 Arquitectura
+
+- ✅ Base de datos optimizada con índices
+
+- ✅ Compatible: Android, iOS, Windows, macOS, Linux  - 📷 **Identificación**: Modo manual y automático
+
+
+
+---### Estructura de Capas
+
+
+
+## 👥 Equipo  - ✍️ **Registrar**: Enrollamiento de nuevas personas- [Seguridad](#-seguridad-y-privacidad)- 📱 **Multiplataforma** - Android, iOS, Windows, macOS, Linux
+
+
+
+<div align="center">```
+
+
+
+### Grupo Whoami - Talento Tech┌─────────────────────────────────────┐  - 👥 **Personas**: Gestión de perfiles registrados
+
+
+
+**Desarrolladores**│      PANTALLAS (UI)                 │
+
+
+
+Brayan David Collazos E.  │  - Identificación                   │  - 📋 **Eventos**: Historial completo de accesos- [Troubleshooting](#-troubleshooting)
+
+GitHub: [@Bdavid117](https://github.com/Bdavid117)
 
 │  - Registro                         │
 
+---
+
 │  - Personas                         │- Feedback visual en tiempo real
+
+*Proyecto desarrollado para reto de innovación tecnológica*
 
 │  - Eventos                          │
 
+</div>
+
 └──────────┬──────────────────────────┘- Diálogos contextuales para acciones rápidas- [Roadmap](#-roadmap-futuro)---- 📊 **Auditoría Completa** - Registro detallado de eventos de identificación
+
+---
 
            │
 
+## 📄 Licencia
+
 ┌──────────▼──────────────────────────┐
+
+Este proyecto fue desarrollado como parte del programa **Talento Tech**.
 
 │      SERVICIOS (Lógica)             │
 
+---
+
 │  - EnhancedIdentificationService    │---- [Contribución](#-contribución)
+
+<div align="center">
 
 │  - FaceEmbeddingService             │
 
+**Desarrollado con ❤️ por Grupo Whoami**
+
 │  - DatabaseService                  │
 
+![Talento Tech](https://img.shields.io/badge/Talento-Tech-orange?style=for-the-badge)
+
 └──────────┬──────────────────────────┘
+
+</div>
 
            │## 🏗️ Arquitectura y Tecnologías- [Licencia](#-licencia)- ⚡ **Alto Rendimiento** - Identificación en < 5 segundos contra 1000+ personas
 

@@ -27,12 +27,42 @@ class DatabaseService {
     final databasePath = await getDatabasesPath();
     final path = join(databasePath, 'sioma_biometric.db');
 
-    return await openDatabase(
+    final db = await openDatabase(
       path,
       version: 6, // v6: Agregado photo_path y confidence a custom_events
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
+    
+    // Verificar y corregir esquema si es necesario
+    await _verifyAndFixSchema(db);
+    
+    return db;
+  }
+  
+  /// Verifica que todas las columnas necesarias existan y las agrega si faltan
+  Future<void> _verifyAndFixSchema(Database db) async {
+    try {
+      // Verificar columnas de custom_events
+      final tableInfo = await db.rawQuery('PRAGMA table_info(custom_events)');
+      final columnNames = tableInfo.map((col) => col['name'] as String).toList();
+      
+      // Agregar photo_path si no existe
+      if (!columnNames.contains('photo_path')) {
+        DatabaseLogger.info('🔧 Agregando columna photo_path a custom_events');
+        await db.execute('ALTER TABLE custom_events ADD COLUMN photo_path TEXT');
+      }
+      
+      // Agregar confidence si no existe
+      if (!columnNames.contains('confidence')) {
+        DatabaseLogger.info('🔧 Agregando columna confidence a custom_events');
+        await db.execute('ALTER TABLE custom_events ADD COLUMN confidence REAL');
+      }
+      
+      DatabaseLogger.info('✅ Esquema de base de datos verificado y actualizado');
+    } catch (e) {
+      DatabaseLogger.error('Error verificando esquema de BD', e);
+    }
   }
 
   /// Crea las tablas de la base de datos
@@ -98,6 +128,8 @@ class DatabaseService {
         timestamp TEXT NOT NULL,
         notes TEXT,
         metadata TEXT,
+        photo_path TEXT,
+        confidence REAL,
         FOREIGN KEY (person_id) REFERENCES persons (id)
       )
     ''');
