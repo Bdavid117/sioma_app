@@ -1,3 +1,153 @@
+# SIOMA — Sistema Inteligente de Optimización y Monitoreo de Accesos
+
+Badges: 
+![Flutter](https://img.shields.io/badge/Flutter-3.24.5-02569B?style=flat-square&logo=flutter&logoColor=white)
+![Dart](https://img.shields.io/badge/Dart-3.5.4-0175C2?style=flat-square&logo=dart&logoColor=white)
+![ML Kit](https://img.shields.io/badge/Google-ML_Kit-4285F4?style=flat-square&logo=google&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-Embedded_DB-003B57?style=flat-square&logo=sqlite&logoColor=white)
+
+Desarrollado por el Grupo Whoami — Talento Tech
+
+---
+
+## Descripción
+
+SIOMA es una aplicación móvil de reconocimiento facial para control de accesos y registro de eventos, con procesamiento 100% local (offline). Integra Google ML Kit para la detección facial y un motor propio de identificación con embeddings de 256 dimensiones, umbral adaptativo y registro de evidencias (foto, confianza, metadata) por evento.
+
+Qué resuelve:
+- Identificación confiable sin internet ni servicios en la nube.
+- Registro de entradas/salidas con evidencia y auditoría.
+- Privacidad por diseño: los datos biométricos nunca salen del dispositivo.
+
+---
+
+## Por qué destaca (funcionalidades diferenciales)
+
+- Embeddings 256D optimizados (mejor balance precisión/velocidad frente a 512D).
+- Umbral adaptativo dinámico (55–60%) según calidad ML Kit y condiciones de captura.
+- ML Kit Boost (+0 a +10%) por ángulos, sonrisa y ojos abiertos para mejorar la confianza.
+- Modo Manual y Modo Automático (escaneo cada 2s) para operación continua.
+- Evidencia forense por evento: foto, nivel de confianza, metadata y ubicación.
+- Base de datos local con migraciones automáticas y verificación de esquema en inicio.
+
+---
+
+## Arquitectura y Tecnologías
+
+Lenguajes y Frameworks:
+- Flutter 3.24.5 (UI multiplataforma, Material 3)
+- Dart 3.5.4 (null-safety, async/await)
+
+Visión por Computadora y ML:
+- Google ML Kit Face Detection (landmarks, contornos, ángulos, expresiones)
+- Algoritmo propio de embeddings 256D (80% ML Kit + 20% imagen, normalización L2)
+
+Persistencia y Plataforma:
+- SQLite con Sqflite (migraciones v1→v6, índices, verificación de columnas)
+- Camera plugin (captura nativa)
+- Path Provider (rutas locales)
+
+Arquitectura en capas (alto nivel):
+- Presentación (pantallas): Identificación, Registro, Personas, Eventos
+- Servicios: EnhancedIdentificationService, FaceEmbeddingService, DatabaseService, FaceDetectionService
+- Datos: ML Kit API, SQLite local, sistema de archivos (fotos)
+
+---
+
+## Instalación rápida
+
+Requisitos:
+- Flutter SDK 3.24.5+ y Dart 3.5.4+
+- Android Studio/Xcode y un dispositivo con cámara
+
+Pasos:
+```bash
+git clone https://github.com/Bdavid117/sioma_app.git
+cd sioma_app
+flutter pub get
+flutter run
+```
+
+Permisos Android (android/app/src/main/AndroidManifest.xml):
+```xml
+<uses-permission android:name="android.permission.CAMERA"/>
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+```
+
+---
+
+## Uso esencial
+
+Registrar persona:
+1) Ir a la pestaña “Registrar”.
+2) Capturar rostro centrado y con buena iluminación.
+3) Completar nombre y documento, guardar.
+
+Identificar persona:
+- Manual: pestaña “Identificación” → MANUAL → Capturar e identificar.
+- Automático: pestaña “Identificación” → activar AUTO (escanea cada 2s) → confirmar evento.
+
+Eventos:
+- Pestaña “Eventos” para ver entradas/salidas con foto, confianza, timestamp y metadata.
+
+---
+
+## Cómo funciona (resumen técnico)
+
+1) Captura de imagen (cámara nativa).
+2) Detección facial (ML Kit): ángulos, ojos, sonrisa, contornos, calidad.
+3) Embedding 256D (80% rasgos ML Kit + 20% imagen), normalizado (L2).
+4) Comparación 1:N (coseno 65% + euclidean 25% + manhattan 10%).
+5) Umbral adaptativo (55–60%) con ML Kit Boost (+0 a +10%).
+6) Resultado: identificación, registro de evento con evidencia y almacenamiento en SQLite.
+
+---
+
+## Modelo de datos (principal)
+
+- persons: id, name, document_id (unique), photo_path, embedding (JSON), metadata, created_at
+- custom_events: id, person_id, person_name, person_document, event_type, event_name, location, timestamp, notes, photo_path, metadata, confidence
+- analysis_events: auditoría de procesos de detección/embedding
+
+---
+
+## Rendimiento y escalabilidad
+
+- Identificación completa típica: ~410ms (captura → resultado).
+- Escala a 10,000+ personas con índices y consultas <100ms.
+- RAM ~120MB; CPU picos ~40% durante procesamiento; almacenamiento ~50MB (+ fotos).
+
+---
+
+## Seguridad y privacidad
+
+- 100% local: sin nube, sin tracking, compliance por diseño.
+- Embeddings no reversibles (no es posible reconstruir el rostro).
+- Validación y sanitización de entradas; consultas parametrizadas.
+
+---
+
+## Generar APK (producción)
+
+```bash
+flutter clean
+flutter pub get
+flutter build apk --release
+# Salida: build/app/outputs/flutter-apk/app-release.apk
+```
+
+APK por arquitectura (más livianos):
+```bash
+flutter build apk --release --split-per-abi
+```
+
+---
+
+## Equipo
+
+Proyecto desarrollado por el Grupo Whoami — Talento Tech.
+
+Licencia: MIT.
 # SIOMA - Sistema Inteligente de Optimización y Monitoreo de Accesos# SIOMA App# SIOMA - Sistema Inteligente de Optimización y Monitoreo de Accesos# 🎯 SIOMA - Sistema Inteligente de Optimización y Monitoreo de Accesos# 🔬 SIOMA - Sistema de Identificación Offline con Machine Learning y Análisis
 
 
