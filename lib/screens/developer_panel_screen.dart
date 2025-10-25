@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
 import '../services/database_service.dart';
 import '../services/face_embedding_service.dart';
 import '../services/camera_service.dart';
+import '../services/pdf_report_generator.dart';
 import 'database_test_screen.dart';
 import 'camera_test_screen.dart';
 import 'embedding_test_screen.dart';
 import 'features_demo_screen.dart';
 import 'main_navigation_screen.dart';
+import 'developer_mode_screen.dart';
+import 'realtime_scanner_screen.dart';
 
 /// Panel técnico con herramientas de desarrollador y debugging
 class DeveloperPanelScreen extends StatefulWidget {
@@ -24,6 +31,7 @@ class _DeveloperPanelScreenState extends State<DeveloperPanelScreen> {
   Map<String, dynamic> _systemStats = {};
   bool _isLoading = false;
   String _statusMessage = '';
+  bool _isBusy = false;
 
   @override
   void initState() {
@@ -65,6 +73,108 @@ class _DeveloperPanelScreenState extends State<DeveloperPanelScreen> {
 
   void _enableDeveloperMode() {
     MainNavigationController.enableDeveloperMode(context);
+  }
+
+  Future<void> _optimizeDatabase() async {
+    if (_isBusy) return;
+    setState(() => _isBusy = true);
+    try {
+      await _dbService.optimizeDatabase();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ Base de datos optimizada (ANALYZE + VACUUM)'), backgroundColor: Colors.green),
+      );
+      await _loadSystemStats();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Error optimizando BD: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _generatePdfReport() async {
+    if (_isBusy) return;
+    setState(() => _isBusy = true);
+    try {
+      final generator = PDFReportGenerator(_dbService);
+      final file = await generator.generateAttendanceReport();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('📄 Reporte generado: ${file.path.split(Platform.pathSeparator).last}'), backgroundColor: Colors.blue),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Error generando PDF: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  Future<void> _clearTempCache() async {
+    if (_isBusy) return;
+    setState(() => _isBusy = true);
+    try {
+      final tempDir = await getTemporaryDirectory();
+      int removed = 0;
+      if (await tempDir.exists()) {
+        await for (var entity in tempDir.list(recursive: false)) {
+          if (entity is File && (entity.path.endsWith('.jpg') || entity.path.endsWith('.png'))) {
+            try { await entity.delete(); removed++; } catch (_) {}
+          }
+        }
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('🧹 Caché temporal limpiado ($removed archivos)'), backgroundColor: Colors.orange),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Error limpiando caché: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
+  }
+
+  void _openDeveloperSettings() {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const DeveloperModeScreen()));
+  }
+
+  void _openRealtimeScanner() {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => const RealTimeScannerScreen()));
+  }
+
+  Future<void> _exportDatabase() async {
+    if (_isBusy) return;
+    setState(() => _isBusy = true);
+    try {
+      final dbDir = await getDatabasesPath();
+      final src = File(p.join(dbDir, 'sioma_biometric.db'));
+      if (!await src.exists()) {
+        throw Exception('Archivo de BD no encontrado');
+      }
+      final docs = await getApplicationDocumentsDirectory();
+      final ts = DateTime.now().toIso8601String().replaceAll(':', '-');
+      final dst = File(p.join(docs.path, 'sioma_backup_$ts.db'));
+      await src.copy(dst.path);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('💾 BD exportada: ${p.basename(dst.path)}'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Error exportando BD: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isBusy = false);
+    }
   }
 
   void _navigateToTool(String tool) {
@@ -126,6 +236,10 @@ class _DeveloperPanelScreenState extends State<DeveloperPanelScreen> {
 
               // Herramientas de desarrollador
               _buildDeveloperToolsCard(),
+              const SizedBox(height: 16),
+
+              // Acciones rápidas técnicas
+              _buildQuickActionsCard(),
               const SizedBox(height: 16),
 
               // Modo desarrollador avanzado
@@ -308,6 +422,74 @@ class _DeveloperPanelScreenState extends State<DeveloperPanelScreen> {
     );
   }
 
+  Widget _buildQuickActionsCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Acciones Rápidas (Técnico)',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            GridView.count(
+              crossAxisCount: 2,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 2.6,
+              physics: const NeverScrollableScrollPhysics(),
+              shrinkWrap: true,
+              children: [
+                _buildActionChip(
+                  label: 'Optimizar BD',
+                  icon: Icons.speed,
+                  color: Colors.blue,
+                  onTap: _optimizeDatabase,
+                ),
+                _buildActionChip(
+                  label: 'Reporte PDF',
+                  icon: Icons.picture_as_pdf,
+                  color: Colors.red,
+                  onTap: _generatePdfReport,
+                ),
+                _buildActionChip(
+                  label: 'Limpiar Caché',
+                  icon: Icons.delete_sweep,
+                  color: Colors.orange,
+                  onTap: _clearTempCache,
+                ),
+                _buildActionChip(
+                  label: 'Exportar BD',
+                  icon: Icons.save_alt,
+                  color: Colors.green,
+                  onTap: _exportDatabase,
+                ),
+                _buildActionChip(
+                  label: 'Scanner Tiempo Real',
+                  icon: Icons.qr_code_scanner,
+                  color: Colors.teal,
+                  onTap: _openRealtimeScanner,
+                ),
+                _buildActionChip(
+                  label: 'Ajustes Desarrollador',
+                  icon: Icons.tune,
+                  color: Colors.purple,
+                  onTap: _openDeveloperSettings,
+                ),
+              ],
+            ),
+            if (_isBusy) ...[
+              const SizedBox(height: 12),
+              const LinearProgressIndicator(minHeight: 3),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAdvancedModeCard() {
     return Card(
       color: Colors.orange[50],
@@ -407,6 +589,38 @@ class _DeveloperPanelScreenState extends State<DeveloperPanelScreen> {
               maxLines: 2,
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionChip({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: color.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(fontWeight: FontWeight.w600, color: color),
+                ),
+              ),
+              Icon(Icons.chevron_right, color: color.withValues(alpha: 0.7)),
+            ],
+          ),
         ),
       ),
     );
