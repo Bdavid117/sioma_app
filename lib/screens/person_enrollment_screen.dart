@@ -5,7 +5,7 @@ import '../services/face_embedding_service.dart';
 import '../services/identification_service.dart';
 import '../models/person.dart';
 import '../utils/validation_utils.dart';
-import '../screens/camera_capture_screen.dart';
+import '../screens/smart_camera_capture_screen.dart';
 import 'dart:io';
 import 'dart:convert';
 
@@ -109,15 +109,16 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
     try {
       setState(() {
         _isProcessing = true;
-        _statusMessage = 'Abriendo cámara...';
+        _statusMessage = 'Abriendo cámara inteligente...';
       });
 
       final result = await Navigator.push<String>(
         context,
         MaterialPageRoute(
-          builder: (context) => CameraCaptureScreen(
+          builder: (context) => SmartCameraCaptureScreen(
             personName: _nameController.text,
             documentId: _documentController.text,
+            autoCapture: true, // Modo automático habilitado
             onPhotoTaken: (photoPath) {
               // Callback vacío para evitar duplicación
               // El procesamiento se hará cuando se retorne el result

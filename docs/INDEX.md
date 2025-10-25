@@ -31,6 +31,7 @@ Bienvenido a la documentación completa del Sistema de Identificación Offline c
 
 | Documento | Descripción |
 |-----------|-------------|
+| **[RIVERPOD_GUIDE.md](./RIVERPOD_GUIDE.md)** | 🆕 Guía completa de Riverpod (state management) |
 | **[MEJORAS_CODIGO.md](./development/MEJORAS_CODIGO.md)** | Sugerencias de mejora priorizadas |
 | **[SEGURIDAD.md](./development/SEGURIDAD.md)** | Medidas de seguridad implementadas |
 | **[TESTING.md](./development/TESTING.md)** | Estrategia de testing |

@@ -1,26 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/database_service.dart';
 import '../models/analysis_event.dart';
 import '../models/identification_event.dart';
 import '../models/custom_event.dart';
 import '../models/person.dart';
+import '../providers/service_providers.dart';
+import '../providers/state_providers.dart';
 import 'dart:convert';
 
 /// Pantalla de gestión de eventos de registro
 /// Permite ver historial completo de identificaciones y análisis
-class EventsScreen extends StatefulWidget {
+class EventsScreen extends ConsumerStatefulWidget {
   const EventsScreen({super.key});
 
   @override
-  State<EventsScreen> createState() => _EventsScreenState();
+  ConsumerState<EventsScreen> createState() => _EventsScreenState();
 }
 
-class _EventsScreenState extends State<EventsScreen> {
-  final DatabaseService _dbService = DatabaseService();
-  
+class _EventsScreenState extends ConsumerState<EventsScreen> {
   List<AnalysisEvent> _analysisEvents = [];
   List<IdentificationEvent> _identificationEvents = [];
-  bool _isLoading = true;
   String _selectedFilter = 'all'; // 'all', 'successful', 'failed', 'registration', 'identification'
   
   // Estadísticas
@@ -31,32 +31,39 @@ class _EventsScreenState extends State<EventsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadEvents();
+    // Cargar eventos al iniciar
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadEvents();
+    });
   }
 
   Future<void> _loadEvents() async {
-    setState(() {
-      _isLoading = true;
-    });
+    final eventsNotifier = ref.read(eventsProvider.notifier);
+    final dbService = ref.read(databaseServiceProvider);
+    
+    eventsNotifier.setLoading(true);
 
     try {
       // Cargar eventos de análisis (más detallados)
-      _analysisEvents = await _dbService.getAllAnalysisEvents();
+      _analysisEvents = await dbService.getAllAnalysisEvents();
       
       // Cargar eventos de identificación tradicionales
-      _identificationEvents = await _dbService.getAllEvents(limit: 1000);
+      final identEvents = await dbService.getAllEvents(limit: 1000);
+      
+      setState(() {
+        _identificationEvents = identEvents;
+      });
+      
+      // Actualizar estado en Riverpod
+      eventsNotifier.setEvents(identEvents);
       
       // Calcular estadísticas
       _calculateStats();
-      
-      setState(() {
-        _isLoading = false;
-      });
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      _showError('Error al cargar eventos: $e');
+      eventsNotifier.setError('Error al cargar eventos: $e');
+      if (mounted) {
+        _showError('Error al cargar eventos: $e');
+      }
     }
   }
 
@@ -358,6 +365,9 @@ class _EventsScreenState extends State<EventsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Observar el estado de eventos desde Riverpod
+    final eventsState = ref.watch(eventsProvider);
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Registro de Eventos'),
@@ -377,22 +387,39 @@ class _EventsScreenState extends State<EventsScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Registrar Evento'),
       ),
-      body: _isLoading
+      body: eventsState.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // Estadísticas
-                _buildStatsSection(),
-                
-                // Filtros
-                _buildFilterSection(),
-                
-                // Lista de eventos
-                Expanded(
-                  child: _buildEventsList(),
+          : eventsState.hasError
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text(eventsState.error ?? 'Error desconocido'),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _loadEvents,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Reintentar'),
+                      ),
+                    ],
+                  ),
+                )
+              : Column(
+                  children: [
+                    // Estadísticas
+                    _buildStatsSection(),
+                    
+                    // Filtros
+                    _buildFilterSection(),
+                    
+                    // Lista de eventos
+                    Expanded(
+                      child: _buildEventsList(),
+                    ),
+                  ],
                 ),
-              ],
-            ),
     );
   }
 

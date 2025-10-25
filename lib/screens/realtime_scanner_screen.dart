@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:camera/camera.dart';
 import '../services/camera_service.dart';
 import '../services/identification_service.dart';
@@ -6,22 +7,23 @@ import '../services/database_service.dart';
 import '../models/person.dart';
 import '../models/analysis_event.dart';
 import '../utils/app_logger.dart';
+import '../providers/service_providers.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:math';
 
 /// Scanner automático que detecta personas registradas en tiempo real
-class RealTimeScannerScreen extends StatefulWidget {
+class RealTimeScannerScreen extends ConsumerStatefulWidget {
   const RealTimeScannerScreen({super.key});
 
   @override
-  State<RealTimeScannerScreen> createState() => _RealTimeScannerScreenState();
+  ConsumerState<RealTimeScannerScreen> createState() => _RealTimeScannerScreenState();
 }
 
-class _RealTimeScannerScreenState extends State<RealTimeScannerScreen> {
-  final CameraService _cameraService = CameraService();
-  final IdentificationService _identificationService = IdentificationService();
-  final DatabaseService _dbService = DatabaseService();
+class _RealTimeScannerScreenState extends ConsumerState<RealTimeScannerScreen> {
+  late final CameraService _cameraService;
+  late final IdentificationService _identificationService;
+  late final DatabaseService _dbService;
 
   bool _isScanning = false;
   bool _isInitialized = false;
@@ -48,6 +50,9 @@ class _RealTimeScannerScreenState extends State<RealTimeScannerScreen> {
   @override
   void initState() {
     super.initState();
+    _cameraService = ref.read(cameraServiceProvider);
+    _identificationService = ref.read(identificationServiceProvider);
+    _dbService = ref.read(databaseServiceProvider);
     _initializeScanner();
   }
 
@@ -150,7 +155,7 @@ class _RealTimeScannerScreenState extends State<RealTimeScannerScreen> {
         _isInitialized = false;
         _statusMessage = '❌ Error: $e\n\nIntenta reinicializar o usa modo manual.';
       });
-      AppLogger.error('Error completo de inicialización', e);
+      AppLogger.error('Error completo de inicialización', error: e);
     }
   }
 

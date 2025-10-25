@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:camera/camera.dart';
 import '../services/camera_service.dart';
 import '../services/identification_service.dart';
@@ -6,23 +7,24 @@ import '../services/database_service.dart';
 import '../models/person.dart';
 import '../models/custom_event.dart';
 import '../utils/app_logger.dart';
+import '../providers/service_providers.dart';
 
 import 'dart:io';
 import 'dart:async';
 
 /// Pantalla fusionada de identificación en tiempo real con cámara completa
 /// Combina funcionalidades de identificación manual y scanner automático
-class AdvancedIdentificationScreen extends StatefulWidget {
+class AdvancedIdentificationScreen extends ConsumerStatefulWidget {
   const AdvancedIdentificationScreen({super.key});
 
   @override
-  State<AdvancedIdentificationScreen> createState() => _AdvancedIdentificationScreenState();
+  ConsumerState<AdvancedIdentificationScreen> createState() => _AdvancedIdentificationScreenState();
 }
 
-class _AdvancedIdentificationScreenState extends State<AdvancedIdentificationScreen> {
-  final CameraService _cameraService = CameraService();
-  final IdentificationService _identificationService = IdentificationService();
-  final DatabaseService _dbService = DatabaseService();
+class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentificationScreen> {
+  late final CameraService _cameraService;
+  late final IdentificationService _identificationService;
+  late final DatabaseService _dbService;
 
   // Estados principales
   bool _isScanning = false;
@@ -50,6 +52,9 @@ class _AdvancedIdentificationScreenState extends State<AdvancedIdentificationScr
   @override
   void initState() {
     super.initState();
+    _cameraService = ref.read(cameraServiceProvider);
+    _identificationService = ref.read(identificationServiceProvider);
+    _dbService = ref.read(databaseServiceProvider);
     _initializeSystem();
   }
 

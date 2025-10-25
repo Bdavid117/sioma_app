@@ -1,25 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/identification_service.dart';
 import '../services/database_service.dart';
 import '../screens/camera_capture_screen.dart';
 import '../models/person.dart';
 import '../utils/app_logger.dart';
+import '../providers/service_providers.dart';
+import '../providers/state_providers.dart';
 import 'dart:io';
 
 /// Pantalla principal de identificación 1:N en tiempo real
-class IdentificationScreen extends StatefulWidget {
+class IdentificationScreen extends ConsumerStatefulWidget {
   const IdentificationScreen({super.key});
 
   @override
-  State<IdentificationScreen> createState() => _IdentificationScreenState();
+  ConsumerState<IdentificationScreen> createState() => _IdentificationScreenState();
 }
 
-class _IdentificationScreenState extends State<IdentificationScreen> {
-  final IdentificationService _identificationService = IdentificationService();
-
+class _IdentificationScreenState extends ConsumerState<IdentificationScreen> {
   // Estado de la identificación
   IdentificationResult? _lastResult;
-  bool _isProcessing = false;
   String _statusMessage = '';
   double _currentThreshold = 0.7;
   String? _currentImagePath;
@@ -30,44 +30,50 @@ class _IdentificationScreenState extends State<IdentificationScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeService();
-    _loadStats();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeService();
+      _loadStats();
+    });
   }
 
   Future<void> _initializeService() async {
+    final processNotifier = ref.read(identificationProcessProvider.notifier);
+    final identificationService = ref.read(identificationServiceProvider);
+    
+    processNotifier.startProcessing();
     setState(() {
-      _isProcessing = true;
       _statusMessage = 'Inicializando servicio de identificación...';
     });
 
     try {
-      final success = await _identificationService.initialize();
+      final success = await identificationService.initialize();
       if (success) {
         // Calcular threshold óptimo
-        final optimalThreshold = await _identificationService.calculateOptimalThreshold();
+        final optimalThreshold = await identificationService.calculateOptimalThreshold();
 
         setState(() {
           _currentThreshold = optimalThreshold;
-          _isProcessing = false;
           _statusMessage = 'Sistema listo para identificación';
         });
+        processNotifier.stopScanning();
       } else {
         setState(() {
-          _isProcessing = false;
           _statusMessage = 'Error al inicializar el servicio';
         });
+        processNotifier.setError('Error al inicializar el servicio');
       }
     } catch (e) {
       setState(() {
-        _isProcessing = false;
         _statusMessage = 'Error: $e';
       });
+      processNotifier.setError('Error: $e');
     }
   }
 
   Future<void> _loadStats() async {
     try {
-      final stats = await _identificationService.getIdentificationStats();
+      final identificationService = ref.read(identificationServiceProvider);
+      final stats = await identificationService.getIdentificationStats();
       setState(() {
         _stats = stats;
       });
@@ -105,8 +111,12 @@ class _IdentificationScreenState extends State<IdentificationScreen> {
 
   /// Realiza el proceso de identificación 1:N
   Future<void> _performIdentification(String imagePath) async {
+    final processNotifier = ref.read(identificationProcessProvider.notifier);
+    final identificationService = ref.read(identificationServiceProvider);
+    final eventsNotifier = ref.read(eventsProvider.notifier);
+    
+    processNotifier.startProcessing();
     setState(() {
-      _isProcessing = true;
       _statusMessage = 'Analizando imagen...';
       _currentImagePath = imagePath;
       _lastResult = null;
@@ -114,7 +124,7 @@ class _IdentificationScreenState extends State<IdentificationScreen> {
 
     try {
       // Realizar identificación 1:N
-      final result = await _identificationService.identifyPerson(
+      final result = await identificationService.identifyPerson(
         imagePath,
         threshold: _currentThreshold,
         saveEvent: true,
@@ -122,18 +132,30 @@ class _IdentificationScreenState extends State<IdentificationScreen> {
 
       setState(() {
         _lastResult = result;
-        _isProcessing = false;
         _statusMessage = result.statusMessage;
       });
+
+      // Actualizar estado de Riverpod
+      if (result.isIdentified && result.person != null) {
+        processNotifier.setIdentificationResult(
+          personName: result.person!.name,
+          confidence: result.confidence!,
+        );
+      } else {
+        processNotifier.setNoMatch();
+      }
 
       // Actualizar estadísticas
       await _loadStats();
 
       // Mostrar resultado detallado
-      _showResultDialog(result);
+      if (mounted) {
+        _showResultDialog(result);
+      }
     } catch (e) {
+      final processNotifier = ref.read(identificationProcessProvider.notifier);
+      processNotifier.setError('Error durante identificación: $e');
       setState(() {
-        _isProcessing = false;
         _statusMessage = 'Error durante identificación: $e';
       });
     }
@@ -533,6 +555,10 @@ class _IdentificationScreenState extends State<IdentificationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Observar el estado del proceso de identificación
+    final processState = ref.watch(identificationProcessProvider);
+    final isProcessing = processState.isProcessing;
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Identificación de Personas'),
@@ -568,8 +594,8 @@ class _IdentificationScreenState extends State<IdentificationScreen> {
 
               // Botón principal de identificación
               ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _captureAndIdentify,
-                icon: _isProcessing
+                onPressed: isProcessing ? null : _captureAndIdentify,
+                icon: isProcessing
                     ? const SizedBox(
                         width: 20,
                         height: 20,
@@ -579,7 +605,7 @@ class _IdentificationScreenState extends State<IdentificationScreen> {
                         ),
                       )
                     : const Icon(Icons.person_search),
-                label: Text(_isProcessing ? 'Procesando...' : 'Identificar Persona'),
+                label: Text(isProcessing ? 'Procesando...' : 'Identificar Persona'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.deepPurple,
                   foregroundColor: Colors.white,

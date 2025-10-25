@@ -29,7 +29,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4, // Incrementado para incluir nuevos índices
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -106,7 +106,19 @@ class DatabaseService {
       'CREATE INDEX idx_document_id ON persons(document_id)',
     );
     await db.execute(
+      'CREATE INDEX idx_persons_name ON persons(name)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_persons_created_at ON persons(created_at DESC)',
+    );
+    await db.execute(
       'CREATE INDEX idx_timestamp ON identification_events(timestamp DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_events_person_id ON identification_events(person_id)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_events_identified ON identification_events(identified)',
     );
     await db.execute(
       'CREATE INDEX idx_analysis_timestamp ON analysis_events(timestamp DESC)',
@@ -123,6 +135,8 @@ class DatabaseService {
     await db.execute(
       'CREATE INDEX idx_custom_events_person ON custom_events(person_id)',
     );
+    
+    DatabaseLogger.info('Database created successfully with all tables and indexes');
   }
 
   /// Actualiza la base de datos a versiones nuevas
@@ -153,6 +167,8 @@ class DatabaseService {
       await db.execute(
         'CREATE INDEX idx_analysis_type ON analysis_events(analysis_type)',
       );
+      
+      DatabaseLogger.info('Upgraded to version 2: Added analysis_events table');
     }
 
     if (oldVersion < 3) {
@@ -184,6 +200,27 @@ class DatabaseService {
       await db.execute(
         'CREATE INDEX idx_custom_events_person ON custom_events(person_id)',
       );
+      
+      DatabaseLogger.info('Upgraded to version 3: Added custom_events table');
+    }
+    
+    // Versión 4: Agregar índices adicionales para optimización
+    if (oldVersion < 4) {
+      // Solo crear índices si no existen
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_persons_name ON persons(name)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_persons_created_at ON persons(created_at DESC)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_events_person_id ON identification_events(person_id)',
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_events_identified ON identification_events(identified)',
+      );
+      
+      DatabaseLogger.info('Upgraded to version 4: Added performance indexes');
     }
   }
 
@@ -245,8 +282,16 @@ class DatabaseService {
     }
   }
 
-  /// Obtiene todas las personas con límites de seguridad
-  Future<List<Person>> getAllPersons({int? limit, int? offset}) async {
+  /// Obtiene todas las personas con límites de seguridad y paginación optimizada
+  /// 
+  /// [limit] - Número máximo de resultados (máx 1000, por defecto 100)
+  /// [offset] - Número de registros a saltar para paginación
+  /// [orderBy] - Campo para ordenar (por defecto 'created_at DESC')
+  Future<List<Person>> getAllPersons({
+    int? limit, 
+    int? offset,
+    String orderBy = 'created_at DESC',
+  }) async {
     try {
       final db = await database;
 
@@ -254,17 +299,56 @@ class DatabaseService {
       final safeLimit = limit != null ? (limit > 1000 ? 1000 : limit) : 100;
       final safeOffset = offset ?? 0;
 
+      DatabaseLogger.debug('Querying persons: limit=$safeLimit, offset=$safeOffset, orderBy=$orderBy');
+
       final List<Map<String, dynamic>> maps = await db.query(
         'persons',
-        orderBy: 'created_at DESC',
+        orderBy: orderBy,
         limit: safeLimit,
         offset: safeOffset,
       );
 
+      DatabaseLogger.debug('Retrieved ${maps.length} persons from database');
       return List.generate(maps.length, (i) => Person.fromMap(maps[i]));
     } catch (e) {
       DatabaseLogger.error('Error getting all persons', e);
       throw SiomaDatabaseException('Error al obtener la lista de personas', e.toString());
+    }
+  }
+
+  /// Busca personas por nombre o documento con paginación
+  /// 
+  /// Usa índices en 'name' y 'document_id' para búsqueda eficiente
+  Future<List<Person>> searchPersons({
+    required String query,
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      final db = await database;
+      
+      // Aplicar límite de seguridad
+      final safeLimit = limit != null ? (limit > 500 ? 500 : limit) : 50;
+      final safeOffset = offset ?? 0;
+      
+      final searchPattern = '%${query.toLowerCase()}%';
+      
+      DatabaseLogger.debug('Searching persons: query="$query", limit=$safeLimit');
+      
+      final List<Map<String, dynamic>> maps = await db.query(
+        'persons',
+        where: 'LOWER(name) LIKE ? OR LOWER(document_id) LIKE ?',
+        whereArgs: [searchPattern, searchPattern],
+        orderBy: 'name ASC',
+        limit: safeLimit,
+        offset: safeOffset,
+      );
+      
+      DatabaseLogger.debug('Found ${maps.length} persons matching query');
+      return List.generate(maps.length, (i) => Person.fromMap(maps[i]));
+    } catch (e) {
+      DatabaseLogger.error('Error searching persons', e);
+      throw SiomaDatabaseException('Error al buscar personas', e.toString());
     }
   }
 
@@ -328,41 +412,205 @@ class DatabaseService {
   }
 
   /// Obtiene el conteo total de personas
+  /// Usa COUNT(*) optimizado que aprovecha los índices
   Future<int> getPersonsCount() async {
-    final db = await database;
-    final result = await db.rawQuery('SELECT COUNT(*) as count FROM persons');
-    return Sqflite.firstIntValue(result) ?? 0;
+    try {
+      final db = await database;
+      final result = await db.rawQuery('SELECT COUNT(*) as count FROM persons');
+      final count = Sqflite.firstIntValue(result) ?? 0;
+      DatabaseLogger.debug('Total persons count: $count');
+      return count;
+    } catch (e) {
+      DatabaseLogger.error('Error getting persons count', e);
+      return 0;
+    }
+  }
+
+  /// Obtiene estadísticas de la base de datos
+  Future<Map<String, dynamic>> getDatabaseStats() async {
+    try {
+      final db = await database;
+      
+      final personsCount = await getPersonsCount();
+      final eventsResult = await db.rawQuery('SELECT COUNT(*) as count FROM identification_events');
+      final eventsCount = Sqflite.firstIntValue(eventsResult) ?? 0;
+      
+      final analysisResult = await db.rawQuery('SELECT COUNT(*) as count FROM analysis_events');
+      final analysisCount = Sqflite.firstIntValue(analysisResult) ?? 0;
+      
+      final customEventsResult = await db.rawQuery('SELECT COUNT(*) as count FROM custom_events');
+      final customEventsCount = Sqflite.firstIntValue(customEventsResult) ?? 0;
+      
+      // Obtener tamaño estimado de la base de datos
+      final sizeResult = await db.rawQuery('SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()');
+      final dbSize = Sqflite.firstIntValue(sizeResult) ?? 0;
+      
+      final stats = {
+        'persons_count': personsCount,
+        'events_count': eventsCount,
+        'analysis_count': analysisCount,
+        'custom_events_count': customEventsCount,
+        'database_size_bytes': dbSize,
+        'database_size_mb': (dbSize / (1024 * 1024)).toStringAsFixed(2),
+        'total_records': personsCount + eventsCount + analysisCount + customEventsCount,
+      };
+      
+      DatabaseLogger.info('Database stats: $stats');
+      return stats;
+    } catch (e) {
+      DatabaseLogger.error('Error getting database stats', e);
+      return {};
+    }
+  }
+
+  /// Optimiza la base de datos ejecutando VACUUM y ANALYZE
+  /// 
+  /// VACUUM: Reconstruye la base de datos, liberando espacio no utilizado
+  /// ANALYZE: Actualiza estadísticas de índices para mejorar el query planner
+  Future<void> optimizeDatabase() async {
+    try {
+      final db = await database;
+      
+      DatabaseLogger.info('Starting database optimization...');
+      
+      // ANALYZE actualiza las estadísticas de los índices
+      await db.execute('ANALYZE');
+      DatabaseLogger.debug('ANALYZE completed');
+      
+      // VACUUM reconstruye la base de datos (puede tardar en bases grandes)
+      await db.execute('VACUUM');
+      DatabaseLogger.debug('VACUUM completed');
+      
+      DatabaseLogger.info('Database optimization completed successfully');
+    } catch (e) {
+      DatabaseLogger.error('Error optimizing database', e);
+      throw SiomaDatabaseException('Error al optimizar la base de datos', e.toString());
+    }
   }
 
   // ==================== OPERACIONES EVENTS ====================
 
   /// Inserta un nuevo evento de identificación
   Future<int> insertIdentificationEvent(IdentificationEvent event) async {
-    final db = await database;
-    return await db.insert('identification_events', event.toMap());
+    try {
+      final db = await database;
+      final id = await db.insert('identification_events', event.toMap());
+      DatabaseLogger.debug('Identification event inserted: ID=$id');
+      return id;
+    } catch (e) {
+      DatabaseLogger.error('Error inserting identification event', e);
+      throw SiomaDatabaseException('Error al insertar evento de identificación', e.toString());
+    }
   }
 
-  /// Obtiene todos los eventos de identificación
-  Future<List<IdentificationEvent>> getAllEvents({int? limit}) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'identification_events',
-      orderBy: 'timestamp DESC',
-      limit: limit,
-    );
-    return List.generate(maps.length, (i) => IdentificationEvent.fromMap(maps[i]));
+  /// Obtiene todos los eventos de identificación con paginación
+  /// 
+  /// Usa índice idx_timestamp para ordenamiento eficiente
+  Future<List<IdentificationEvent>> getAllEvents({
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      final db = await database;
+      
+      final safeLimit = limit != null ? (limit > 1000 ? 1000 : limit) : 100;
+      final safeOffset = offset ?? 0;
+      
+      DatabaseLogger.debug('Querying events: limit=$safeLimit, offset=$safeOffset');
+      
+      final List<Map<String, dynamic>> maps = await db.query(
+        'identification_events',
+        orderBy: 'timestamp DESC', // Usa idx_timestamp
+        limit: safeLimit,
+        offset: safeOffset,
+      );
+      
+      return List.generate(maps.length, (i) => IdentificationEvent.fromMap(maps[i]));
+    } catch (e) {
+      DatabaseLogger.error('Error getting all events', e);
+      throw SiomaDatabaseException('Error al obtener eventos', e.toString());
+    }
   }
 
-  /// Obtiene eventos por persona
-  Future<List<IdentificationEvent>> getEventsByPerson(int personId) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'identification_events',
-      where: 'person_id = ?',
-      whereArgs: [personId],
-      orderBy: 'timestamp DESC',
-    );
-    return List.generate(maps.length, (i) => IdentificationEvent.fromMap(maps[i]));
+  /// Obtiene eventos por persona (usa índice idx_events_person_id)
+  Future<List<IdentificationEvent>> getEventsByPerson(
+    int personId, {
+    int? limit,
+  }) async {
+    try {
+      final db = await database;
+      
+      final safeLimit = limit ?? 100;
+      
+      DatabaseLogger.debug('Querying events for person: ID=$personId, limit=$safeLimit');
+      
+      final List<Map<String, dynamic>> maps = await db.query(
+        'identification_events',
+        where: 'person_id = ?', // Usa idx_events_person_id
+        whereArgs: [personId],
+        orderBy: 'timestamp DESC',
+        limit: safeLimit,
+      );
+      
+      return List.generate(maps.length, (i) => IdentificationEvent.fromMap(maps[i]));
+    } catch (e) {
+      DatabaseLogger.error('Error getting events by person', e);
+      throw SiomaDatabaseException('Error al obtener eventos de la persona', e.toString());
+    }
+  }
+
+  /// Obtiene eventos por rango de fechas (usa índice idx_timestamp)
+  Future<List<IdentificationEvent>> getEventsByDateRange({
+    required DateTime startDate,
+    required DateTime endDate,
+    int? limit,
+  }) async {
+    try {
+      final db = await database;
+      
+      final safeLimit = limit ?? 500;
+      
+      DatabaseLogger.debug('Querying events by date range: $startDate to $endDate');
+      
+      final List<Map<String, dynamic>> maps = await db.query(
+        'identification_events',
+        where: 'timestamp BETWEEN ? AND ?',
+        whereArgs: [startDate.toIso8601String(), endDate.toIso8601String()],
+        orderBy: 'timestamp DESC', // Usa idx_timestamp
+        limit: safeLimit,
+      );
+      
+      return List.generate(maps.length, (i) => IdentificationEvent.fromMap(maps[i]));
+    } catch (e) {
+      DatabaseLogger.error('Error getting events by date range', e);
+      throw SiomaDatabaseException('Error al obtener eventos por rango de fechas', e.toString());
+    }
+  }
+
+  /// Obtiene solo eventos identificados (usa índice idx_events_identified)
+  Future<List<IdentificationEvent>> getSuccessfulEvents({
+    int? limit,
+    int? offset,
+  }) async {
+    try {
+      final db = await database;
+      
+      final safeLimit = limit ?? 100;
+      final safeOffset = offset ?? 0;
+      
+      final List<Map<String, dynamic>> maps = await db.query(
+        'identification_events',
+        where: 'identified = 1', // Usa idx_events_identified
+        orderBy: 'timestamp DESC',
+        limit: safeLimit,
+        offset: safeOffset,
+      );
+      
+      return List.generate(maps.length, (i) => IdentificationEvent.fromMap(maps[i]));
+    } catch (e) {
+      DatabaseLogger.error('Error getting successful events', e);
+      throw SiomaDatabaseException('Error al obtener eventos exitosos', e.toString());
+    }
   }
 
   /// Obtiene el conteo de eventos

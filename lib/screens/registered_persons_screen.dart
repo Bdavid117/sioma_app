@@ -1,64 +1,63 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/database_service.dart';
 import '../models/person.dart';
-
+import '../providers/service_providers.dart';
+import '../providers/state_providers.dart';
 import 'dart:io';
 
 /// Pantalla para gestionar las personas registradas en el sistema
-class RegisteredPersonsScreen extends StatefulWidget {
+class RegisteredPersonsScreen extends ConsumerStatefulWidget {
   const RegisteredPersonsScreen({super.key});
 
   @override
-  State<RegisteredPersonsScreen> createState() => _RegisteredPersonsScreenState();
+  ConsumerState<RegisteredPersonsScreen> createState() => _RegisteredPersonsScreenState();
 }
 
-class _RegisteredPersonsScreenState extends State<RegisteredPersonsScreen> {
-  final DatabaseService _dbService = DatabaseService();
+class _RegisteredPersonsScreenState extends ConsumerState<RegisteredPersonsScreen> {
   final TextEditingController _searchController = TextEditingController();
 
-  List<Person> _allPersons = [];
   List<Person> _filteredPersons = [];
-  bool _isLoading = false;
-  String _statusMessage = '';
   int _totalCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadPersons();
+    // Cargar personas al iniciar
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadPersons();
+    });
   }
 
   Future<void> _loadPersons() async {
-    setState(() {
-      _isLoading = true;
-      _statusMessage = 'Cargando personas registradas...';
-    });
+    // Usar el notifier de Riverpod
+    final personsNotifier = ref.read(personsProvider.notifier);
+    final dbService = ref.read(databaseServiceProvider);
+    
+    personsNotifier.setLoading(true);
 
     try {
-      final persons = await _dbService.getAllPersons(limit: 100);
-      final count = await _dbService.getPersonsCount();
+      final persons = await dbService.getAllPersons(limit: 100);
+      final count = await dbService.getPersonsCount();
 
+      personsNotifier.setPersons(persons);
       setState(() {
-        _allPersons = persons;
         _filteredPersons = persons;
         _totalCount = count;
-        _isLoading = false;
-        _statusMessage = 'Cargadas ${persons.length} de $count personas';
       });
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _statusMessage = 'Error al cargar personas: $e';
-      });
+      personsNotifier.setError('Error al cargar personas: $e');
     }
   }
 
   void _filterPersons(String query) {
+    final allPersons = ref.read(personsProvider).data ?? [];
+    
     setState(() {
       if (query.isEmpty) {
-        _filteredPersons = _allPersons;
+        _filteredPersons = allPersons;
       } else {
-        _filteredPersons = _allPersons.where((person) {
+        _filteredPersons = allPersons.where((person) {
           final searchLower = query.toLowerCase();
           return person.name.toLowerCase().contains(searchLower) ||
                  person.documentId.toLowerCase().contains(searchLower);
@@ -101,32 +100,41 @@ class _RegisteredPersonsScreenState extends State<RegisteredPersonsScreen> {
 
     if (confirm == true) {
       try {
-        await _dbService.deletePerson(person.id!);
+        final dbService = ref.read(databaseServiceProvider);
+        final personsNotifier = ref.read(personsProvider.notifier);
+        
+        await dbService.deletePerson(person.id!);
 
         // Eliminar foto asociada si existe
         if (person.photoPath != null && await File(person.photoPath!).exists()) {
           await File(person.photoPath!).delete();
         }
 
+        // Actualizar estado en Riverpod
+        personsNotifier.removePerson(person.id!);
+        
+        // Actualizar lista filtrada local
         setState(() {
-          _statusMessage = 'Persona eliminada: ${person.name}';
+          _filteredPersons.removeWhere((p) => p.id == person.id);
         });
 
-        await _loadPersons();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${person.name} ha sido eliminado del sistema'),
-            backgroundColor: Colors.orange,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${person.name} ha sido eliminado del sistema'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al eliminar: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al eliminar: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -213,7 +221,10 @@ class _RegisteredPersonsScreenState extends State<RegisteredPersonsScreen> {
   }
 
   Widget _buildPersonsList() {
-    if (_isLoading) {
+    // Obtener estado de Riverpod
+    final personsState = ref.watch(personsProvider);
+    
+    if (personsState.isLoading) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -226,24 +237,44 @@ class _RegisteredPersonsScreenState extends State<RegisteredPersonsScreen> {
       );
     }
 
+    if (personsState.hasError) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text(personsState.error ?? 'Error desconocido'),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _loadPersons,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (_filteredPersons.isEmpty) {
+      final allPersons = personsState.data ?? [];
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              _allPersons.isEmpty ? Icons.people_outline : Icons.search_off,
+              allPersons.isEmpty ? Icons.people_outline : Icons.search_off,
               size: 64,
               color: Colors.grey,
             ),
             const SizedBox(height: 16),
             Text(
-              _allPersons.isEmpty
+              allPersons.isEmpty
                   ? 'No hay personas registradas'
                   : 'No se encontraron resultados',
               style: const TextStyle(fontSize: 18, color: Colors.grey),
             ),
-            if (_allPersons.isEmpty) ...[
+            if (allPersons.isEmpty) ...[
               const SizedBox(height: 8),
               const Text(
                 'Usa la pestaña "Registro" para agregar personas',
@@ -335,18 +366,30 @@ class _RegisteredPersonsScreenState extends State<RegisteredPersonsScreen> {
   }
 
   Widget _buildStatusBar() {
+    final personsState = ref.watch(personsProvider);
+    final allPersonsCount = personsState.data?.length ?? 0;
+    
+    String statusMessage = 'Total: $_totalCount personas | Mostrando: ${_filteredPersons.length}';
+    
+    if (personsState.hasError) {
+      statusMessage = personsState.error!;
+    } else if (personsState.isLoading) {
+      statusMessage = 'Cargando personas registradas...';
+    }
+    
     return Container(
       padding: const EdgeInsets.all(16),
       color: Colors.grey[100],
       child: Row(
         children: [
-          const Icon(Icons.info_outline, color: Colors.deepPurple),
+          Icon(
+            personsState.hasError ? Icons.error_outline : Icons.info_outline,
+            color: personsState.hasError ? Colors.red : Colors.deepPurple,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              _statusMessage.isEmpty
-                  ? 'Total: $_totalCount personas | Mostrando: ${_filteredPersons.length}'
-                  : _statusMessage,
+              statusMessage,
               style: const TextStyle(fontWeight: FontWeight.w500),
             ),
           ),

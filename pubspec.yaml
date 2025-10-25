@@ -81,9 +81,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # Assets para modelos de TensorFlow Lite
+  # Assets para modelos de TensorFlow Lite e imágenes
   assets:
     - assets/models/
+    - assets/images/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
