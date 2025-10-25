@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/enhanced_identification_service.dart';
 import '../services/identification_service.dart';
 import '../services/database_service.dart';
 import '../screens/smart_camera_capture_screen.dart';
@@ -19,9 +20,9 @@ class IdentificationScreen extends ConsumerStatefulWidget {
 
 class _IdentificationScreenState extends ConsumerState<IdentificationScreen> {
   // Estado de la identificación
-  IdentificationResult? _lastResult;
+  EnhancedIdentificationResult? _lastResult;
   String _statusMessage = '';
-  double _currentThreshold = 0.7;
+  double _currentThreshold = 0.6; // Umbral ajustado según requerimiento
   String? _currentImagePath;
 
   // Estadísticas
@@ -38,22 +39,19 @@ class _IdentificationScreenState extends ConsumerState<IdentificationScreen> {
 
   Future<void> _initializeService() async {
     final processNotifier = ref.read(identificationProcessProvider.notifier);
-    final identificationService = ref.read(identificationServiceProvider);
+    final enhancedService = ref.read(enhancedIdentificationServiceProvider);
     
     processNotifier.startProcessing();
     setState(() {
-      _statusMessage = 'Inicializando servicio de identificación...';
+      _statusMessage = 'Inicializando servicio mejorado con ML Kit...';
     });
 
     try {
-      final success = await identificationService.initialize();
+      final success = await enhancedService.initialize();
       if (success) {
-        // Calcular threshold óptimo
-        final optimalThreshold = await identificationService.calculateOptimalThreshold();
-
         setState(() {
-          _currentThreshold = optimalThreshold;
-          _statusMessage = 'Sistema listo para identificación';
+          _currentThreshold = 0.6; // Umbral configurado
+          _statusMessage = '✅ Sistema mejorado listo (ML Kit + Embeddings)';
         });
         processNotifier.stopScanning();
       } else {
@@ -110,38 +108,43 @@ class _IdentificationScreenState extends ConsumerState<IdentificationScreen> {
     }
   }
 
-  /// Realiza el proceso de identificación 1:N
+  /// Realiza el proceso de identificación 1:N MEJORADO con ML Kit
   Future<void> _performIdentification(String imagePath) async {
     final processNotifier = ref.read(identificationProcessProvider.notifier);
-    final identificationService = ref.read(identificationServiceProvider);
+    final enhancedService = ref.read(enhancedIdentificationServiceProvider);
     final eventsNotifier = ref.read(eventsProvider.notifier);
     
     processNotifier.startProcessing();
     setState(() {
-      _statusMessage = 'Analizando imagen...';
+      _statusMessage = '🔍 Analizando con ML Kit + Embeddings...';
       _currentImagePath = imagePath;
       _lastResult = null;
     });
 
     try {
-      // Realizar identificación 1:N
-      final result = await identificationService.identifyPerson(
+      // Realizar identificación mejorada 1:N con ML Kit
+      final result = await enhancedService.identifyPersonWithMLKit(
         imagePath,
         threshold: _currentThreshold,
-        saveEvent: true,
+        strictMode: false, // Modo balanceado
       );
 
       setState(() {
         _lastResult = result;
-        _statusMessage = result.statusMessage;
+        _statusMessage = result.message;
       });
 
       // Actualizar estado de Riverpod
-      if (result.isIdentified && result.person != null) {
+      if (result.identified && result.person != null) {
         processNotifier.setIdentificationResult(
           personName: result.person!.name,
           confidence: result.confidence!,
         );
+        
+        // Log del boost ML Kit
+        if (result.mlKitBoost != null && result.mlKitBoost! > 0) {
+          AppLogger.info('⭐ ML Kit boost: +${(result.mlKitBoost! * 100).toStringAsFixed(1)}%');
+        }
       } else {
         processNotifier.setNoMatch();
       }
@@ -151,7 +154,7 @@ class _IdentificationScreenState extends ConsumerState<IdentificationScreen> {
 
       // Mostrar resultado detallado
       if (mounted) {
-        _showResultDialog(result);
+        _showEnhancedResultDialog(result);
       }
     } catch (e) {
       final processNotifier = ref.read(identificationProcessProvider.notifier);
@@ -162,22 +165,25 @@ class _IdentificationScreenState extends ConsumerState<IdentificationScreen> {
     }
   }
 
-  /// Muestra diálogo con resultado detallado de identificación
-  void _showResultDialog(IdentificationResult result) {
+  /// Muestra diálogo con resultado MEJORADO de identificación
+  void _showEnhancedResultDialog(EnhancedIdentificationResult result) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Row(
           children: [
             Icon(
-              result.isIdentified ? Icons.check_circle : Icons.help_outline,
-              color: result.isIdentified ? Colors.green : Colors.orange,
+              result.identified ? Icons.verified : 
+              result.success ? Icons.help_outline : Icons.error,
+              color: result.identified ? Colors.green : 
+                     result.success ? Colors.orange : Colors.red,
               size: 32,
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                result.isIdentified ? 'Persona Identificada' : 'Persona No Identificada',
+                result.identified ? '✅ Identificado' : 
+                result.success ? '❌ No Identificado' : '⚠️ Error',
                 style: const TextStyle(fontSize: 18),
               ),
             ),
@@ -204,37 +210,87 @@ class _IdentificationScreenState extends ConsumerState<IdentificationScreen> {
                 ),
               const SizedBox(height: 16),
 
-              // Información del resultado
-              if (result.isIdentified && result.person != null) ...[
+              // NUEVO: Información de calidad ML Kit
+              if (result.mlKitValidation != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('🎯 ML Kit Face Detection:',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      _buildResultRow('  Calidad facial:', 
+                        '${(result.faceQuality * 100).toStringAsFixed(1)}%'),
+                      if (result.mlKitValidation!.analysis != null) ...[
+                        _buildResultRow('  Rostro centrado:', 
+                          result.mlKitValidation!.analysis!.isCentered ? 'Sí ✅' : 'No ❌'),
+                        _buildResultRow('  Ángulo cabeza:', 
+                          '${result.mlKitValidation!.analysis!.headAngle.toStringAsFixed(1)}°'),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Información del resultado de identificación
+              if (result.identified && result.person != null) ...[
                 _buildResultRow('👤 Nombre:', result.person!.name),
                 _buildResultRow('📄 Documento:', result.person!.documentId),
                 _buildResultRow('📅 Registrado:', _formatDate(result.person!.createdAt)),
-                _buildResultRow('🎯 Confianza:', '${(result.confidence! * 100).toStringAsFixed(1)}%'),
-              ] else if (result.hasNoMatch) ...[
+                const Divider(),
+                _buildResultRow('🎯 Confianza Final:', '${(result.confidence! * 100).toStringAsFixed(1)}%'),
+                if (result.baseConfidence != null)
+                  _buildResultRow('  Confianza Base:', '${(result.baseConfidence! * 100).toStringAsFixed(1)}%'),
+                if (result.mlKitBoost != null && result.mlKitBoost! > 0)
+                  _buildResultRow('  Boost ML Kit:', '+${(result.mlKitBoost! * 100).toStringAsFixed(1)}% ⭐'),
+                _buildResultRow('⏱️ Tiempo:', '${result.processingTimeMs}ms'),
+              ] else if (result.success && !result.identified) ...[
                 _buildResultRow('❌ Estado:', 'Persona no reconocida'),
                 if (result.bestCandidate != null)
                   _buildResultRow('🔍 Mejor coincidencia:',
-                    '${result.bestCandidate!.person.name} (${result.bestCandidate!.similarityPercent.toStringAsFixed(1)}%)'),
-                _buildResultRow('📊 Threshold:', '${(_currentThreshold * 100).toStringAsFixed(1)}%'),
-              ] else if (result.isError) ...[
-                _buildResultRow('⚠️ Error:', result.errorMessage!),
+                    '${result.bestCandidate!.person.name} (${(result.bestCandidate!.adjustedConfidence * 100).toStringAsFixed(1)}%)'),
+                _buildResultRow('📊 Umbral requerido:', '${(_currentThreshold * 100).toStringAsFixed(1)}%'),
+                if (result.recommendations.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text('💡 Recomendaciones:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ...result.recommendations.map((rec) => Padding(
+                    padding: const EdgeInsets.only(left: 16, top: 4),
+                    child: Text('• $rec', style: const TextStyle(fontSize: 12)),
+                  )),
+                ],
+              ] else if (!result.success) ...[
+                _buildResultRow('⚠️ Error:', result.message),
+                if (result.recommendations.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  const Text('💡 Recomendaciones:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ...result.recommendations.map((rec) => Padding(
+                    padding: const EdgeInsets.only(left: 16, top: 4),
+                    child: Text('• $rec', style: const TextStyle(fontSize: 12)),
+                  )),
+                ],
               ],
 
               const SizedBox(height: 16),
 
               // Lista de candidatos principales
-              if (result.allCandidates != null && result.allCandidates!.isNotEmpty) ...[
+              if (result.allCandidates.isNotEmpty) ...[
                 const Text(
-                  'Candidatos evaluados:',
+                  'Top candidatos evaluados:',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                ...result.allCandidates!.take(5).map((candidate) => Padding(
+                ...result.allCandidates.take(3).map((candidate) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: candidate.similarity >= _currentThreshold
+                      color: candidate.adjustedConfidence >= _currentThreshold
                           ? Colors.green.withValues(alpha: 0.1)
                           : Colors.grey.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
@@ -244,14 +300,27 @@ class _IdentificationScreenState extends ConsumerState<IdentificationScreen> {
                         Expanded(
                           child: Text(candidate.person.name),
                         ),
-                        Text(
-                          '${candidate.similarityPercent.toStringAsFixed(1)}%',
-                          style: TextStyle(
-                            color: candidate.similarity >= _currentThreshold
-                                ? Colors.green
-                                : Colors.grey,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '${(candidate.adjustedConfidence * 100).toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                color: candidate.adjustedConfidence >= _currentThreshold
+                                    ? Colors.green
+                                    : Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (candidate.mlKitBoost > 0)
+                              Text(
+                                '+${(candidate.mlKitBoost * 100).toStringAsFixed(1)}% ⭐',
+                                style: const TextStyle(
+                                  color: Colors.orange,
+                                  fontSize: 10,
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
@@ -266,7 +335,7 @@ class _IdentificationScreenState extends ConsumerState<IdentificationScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Cerrar'),
           ),
-          if (result.isIdentified && result.person != null)
+          if (result.identified && result.person != null)
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
@@ -518,8 +587,8 @@ class _IdentificationScreenState extends ConsumerState<IdentificationScreen> {
             Row(
               children: [
                 Icon(
-                  _lastResult!.isIdentified ? Icons.check_circle : Icons.help_outline,
-                  color: _lastResult!.isIdentified ? Colors.green : Colors.orange,
+                  _lastResult!.identified ? Icons.check_circle : Icons.help_outline,
+                  color: _lastResult!.identified ? Colors.green : Colors.orange,
                 ),
                 const SizedBox(width: 8),
                 const Expanded(
@@ -531,14 +600,14 @@ class _IdentificationScreenState extends ConsumerState<IdentificationScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            if (_lastResult!.isIdentified && _lastResult!.person != null) ...[
+            if (_lastResult!.identified && _lastResult!.person != null) ...[
               Text('Persona: ${_lastResult!.person!.name}'),
               Text('Documento: ${_lastResult!.person!.documentId}'),
               Text('Confianza: ${(_lastResult!.confidence! * 100).toStringAsFixed(1)}%'),
             ] else ...[
               Text('Estado: Persona no reconocida'),
               if (_lastResult!.bestCandidate != null)
-                Text('Mejor coincidencia: ${_lastResult!.bestCandidate!.similarityPercent.toStringAsFixed(1)}%'),
+                Text('Mejor coincidencia: ${(_lastResult!.bestCandidate!.adjustedConfidence * 100).toStringAsFixed(1)}%'),
             ],
           ],
         ),

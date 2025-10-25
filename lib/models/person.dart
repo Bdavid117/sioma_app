@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// Modelo para representar una persona registrada
 class Person {
   final int? id;
@@ -5,6 +7,7 @@ class Person {
   final String documentId;
   final String? photoPath;
   final String embedding; // JSON string de la lista de embeddings
+  final Map<String, dynamic>? metadata; // Metadata adicional (ej: características ML Kit)
   final DateTime createdAt;
 
   Person({
@@ -13,6 +16,7 @@ class Person {
     required this.documentId,
     this.photoPath,
     required this.embedding,
+    this.metadata,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -24,6 +28,7 @@ class Person {
       'document_id': documentId,
       'photo_path': photoPath,
       'embedding': embedding,
+      'metadata': metadata != null ? jsonEncode(metadata) : null,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -36,6 +41,9 @@ class Person {
       documentId: map['document_id'] as String,
       photoPath: map['photo_path'] as String?,
       embedding: map['embedding'] as String,
+      metadata: map['metadata'] != null 
+          ? jsonDecode(map['metadata'] as String) as Map<String, dynamic>
+          : null,
       createdAt: DateTime.parse(map['created_at'] as String),
     );
   }
@@ -47,6 +55,7 @@ class Person {
     String? documentId,
     String? photoPath,
     String? embedding,
+    Map<String, dynamic>? metadata,
     DateTime? createdAt,
   }) {
     return Person(
@@ -55,6 +64,7 @@ class Person {
       documentId: documentId ?? this.documentId,
       photoPath: photoPath ?? this.photoPath,
       embedding: embedding ?? this.embedding,
+      metadata: metadata ?? this.metadata,
       createdAt: createdAt ?? this.createdAt,
     );
   }

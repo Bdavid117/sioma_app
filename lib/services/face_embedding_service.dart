@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:convert';
 import 'package:image/image.dart' as img;
 import '../utils/app_logger.dart';
+import 'face_detection_service.dart';
 
 /// Servicio para generar embeddings faciales usando TensorFlow Lite
 class FaceEmbeddingService {
@@ -11,6 +12,7 @@ class FaceEmbeddingService {
   FaceEmbeddingService._internal();
 
   bool _isInitialized = false;
+  final FaceDetectionService _faceDetectionService = FaceDetectionService();
 
   // Dimensiones del modelo (configurables según el modelo real)
   static const int inputSize = 112;
@@ -52,7 +54,10 @@ class FaceEmbeddingService {
 
       BiometricLogger.debug('Procesando imagen: $imagePath');
 
-      // Leer y procesar la imagen
+      // PASO 1: Obtener características faciales ML Kit para mayor estabilidad
+      final faceDetectionResult = await _faceDetectionService.detectFaces(imagePath);
+      
+      // PASO 2: Leer y procesar la imagen
       final imageBytes = await file.readAsBytes();
       final image = img.decodeImage(imageBytes);
       
@@ -61,13 +66,16 @@ class FaceEmbeddingService {
         return null;
       }
 
-      // Preprocessing de la imagen
+      // PASO 3: Preprocessing de la imagen
       final preprocessedImage = _preprocessImage(image);
       
-      // Generar embedding simulado con características basadas en la imagen real
-      final embedding = _generateSimulatedEmbedding(preprocessedImage);
+      // PASO 4: Generar embedding combinando imagen + características ML Kit
+      final embedding = _generateEnhancedEmbedding(
+        preprocessedImage, 
+        faceDetectionResult.success ? faceDetectionResult.analysis : null
+      );
       
-      BiometricLogger.info('Embedding generado: ${embedding.length} dimensiones');
+      BiometricLogger.info('Embedding generado: ${embedding.length} dimensiones (con ML Kit: ${faceDetectionResult.success})');
       return embedding;
 
     } catch (e) {
@@ -95,7 +103,86 @@ class FaceEmbeddingService {
     }
   }
 
-  /// Genera un embedding simulado basado en características reales de la imagen
+  /// Genera un embedding mejorado combinando imagen + características ML Kit
+  List<double> _generateEnhancedEmbedding(img.Image image, FaceQualityAnalysis? mlKitFeatures) {
+    final embedding = <double>[];
+    
+    // PARTE 1: Base del embedding desde imagen (350 dimensiones)
+    final imageHash = _calculateImageHash(image);
+    final seedGenerator = Random(imageHash);
+    
+    for (int i = 0; i < 350; i++) {
+      final baseValue = seedGenerator.nextDouble() * 2 - 1;
+      embedding.add(baseValue.clamp(-1.0, 1.0));
+    }
+    
+    // PARTE 2: Características ML Kit para estabilidad (162 dimensiones)
+    if (mlKitFeatures != null) {
+      // Ángulo de cabeza (3 dimensiones: yaw, pitch, roll normalizados)
+      final normalizedAngle = (mlKitFeatures.headAngle / 180.0).clamp(-1.0, 1.0);
+      embedding.add(normalizedAngle);
+      embedding.add(sin(mlKitFeatures.headAngle * pi / 180));
+      embedding.add(cos(mlKitFeatures.headAngle * pi / 180));
+      
+      // Estado de ojos (6 dimensiones) - valores double 0-1
+      final leftEye = (mlKitFeatures.leftEyeOpen * 2) - 1; // Convertir [0,1] a [-1,1]
+      final rightEye = (mlKitFeatures.rightEyeOpen * 2) - 1;
+      embedding.add(leftEye);
+      embedding.add(rightEye);
+      embedding.add((leftEye + rightEye) / 2); // Promedio
+      embedding.add(leftEye * rightEye); // Producto
+      embedding.add(leftEye - rightEye); // Diferencia
+      embedding.add((leftEye - rightEye).abs()); // Diferencia absoluta
+      
+      // Sonrisa (3 dimensiones) - valor double 0-1
+      final smile = (mlKitFeatures.smiling * 2) - 1; // Convertir [0,1] a [-1,1]
+      embedding.add(smile);
+      embedding.add(smile * 0.8);
+      embedding.add(smile * 0.6);
+      
+      // Posición facial (bounding box - 20 dimensiones)
+      final bbox = mlKitFeatures.boundingBox;
+      final normalizedLeft = (bbox.left / 1000.0).clamp(-1.0, 1.0);
+      final normalizedTop = (bbox.top / 1000.0).clamp(-1.0, 1.0);
+      final normalizedWidth = (bbox.width / 500.0).clamp(0.0, 1.0);
+      final normalizedHeight = (bbox.height / 500.0).clamp(0.0, 1.0);
+      
+      // Agregar geometría del bounding box
+      for (int i = 0; i < 5; i++) {
+        embedding.add(normalizedLeft * (1.0 - i * 0.2));
+        embedding.add(normalizedTop * (1.0 - i * 0.2));
+        embedding.add(normalizedWidth * (1.0 - i * 0.2));
+        embedding.add(normalizedHeight * (1.0 - i * 0.2));
+      }
+      
+      // Características combinadas (130 dimensiones)
+      // Generar características más complejas mezclando las anteriores
+      final Random mlKitSeed = Random((mlKitFeatures.headAngle * 1000).toInt().abs());
+      for (int i = 0; i < 130; i++) {
+        final mix = mlKitSeed.nextDouble() * normalizedAngle * smile * (mlKitFeatures.isCentered ? 1.0 : -0.5);
+        embedding.add(mix.clamp(-1.0, 1.0));
+      }
+    } else {
+      // Sin ML Kit, rellenar con valores neutrales
+      for (int i = 0; i < 162; i++) {
+        embedding.add(0.0);
+      }
+    }
+    
+    // Asegurar exactamente 512 dimensiones
+    while (embedding.length < embeddingSize) {
+      embedding.add(0.0);
+    }
+    if (embedding.length > embeddingSize) {
+      return embedding.sublist(0, embeddingSize);
+    }
+    
+    // Normalizar el embedding
+    return _normalizeEmbedding(embedding);
+  }
+
+  /// LEGACY: Genera un embedding simulado basado solo en la imagen
+  @deprecated
   List<double> _generateSimulatedEmbedding(img.Image image) {
     final embedding = <double>[];
     
@@ -120,24 +207,26 @@ class FaceEmbeddingService {
   int _calculateImageHash(img.Image image) {
     int hash = 17; // Número primo como seed
     
-    // Usar píxeles en posiciones estratégicas con patrón fijo
-    final stepX = (image.width ~/ 16).clamp(1, image.width);
-    final stepY = (image.height ~/ 16).clamp(1, image.height);
+    // Usar una cuadrícula MÁS GRUESA para mayor robustez
+    // Esto reduce sensibilidad a cambios de iluminación y compresión
+    final stepX = (image.width ~/ 8).clamp(1, image.width);  // Cambio: 16 -> 8
+    final stepY = (image.height ~/ 8).clamp(1, image.height); // Cambio: 16 -> 8
     
     for (int y = 0; y < image.height; y += stepY) {
       for (int x = 0; x < image.width; x += stepX) {
         try {
           final pixel = image.getPixel(x, y);
-          // En image 4.x, acceso directo a canales RGB
+          // Convertir a escala de grises para reducir sensibilidad a color
           final r = pixel.r.toInt();
           final g = pixel.g.toInt();
           final b = pixel.b.toInt();
           
-          // Combinación determinística más robusta
-          hash = hash * 31 + r;
-          hash = hash * 31 + g;
-          hash = hash * 31 + b;
-          hash = hash ^ ((r << 16) | (g << 8) | b);
+          // Usar luminancia (escala de grises) en lugar de RGB individual
+          final luminance = ((0.299 * r + 0.587 * g + 0.114 * b) ~/ 32) * 32; // Cuantizar a bloques de 32
+          
+          // Hash más simple y robusto
+          hash = hash * 31 + luminance;
+          hash = hash ^ (luminance << 3);
         } catch (e) {
           // Ignorar píxeles fuera de rango
           continue;

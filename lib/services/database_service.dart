@@ -29,7 +29,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 4, // Incrementado para incluir nuevos índices
+      version: 5, // v5: Agregado campo metadata a persons para ML Kit
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -45,6 +45,7 @@ class DatabaseService {
         document_id TEXT NOT NULL UNIQUE,
         photo_path TEXT,
         embedding TEXT NOT NULL,
+        metadata TEXT,
         created_at TEXT NOT NULL
       )
     ''');
@@ -221,6 +222,15 @@ class DatabaseService {
       );
       
       DatabaseLogger.info('Upgraded to version 4: Added performance indexes');
+    }
+    
+    // Versión 5: Agregar campo metadata a persons para ML Kit Face Detection
+    if (oldVersion < 5) {
+      await db.execute(
+        'ALTER TABLE persons ADD COLUMN metadata TEXT',
+      );
+      
+      DatabaseLogger.info('Upgraded to version 5: Added metadata column to persons for ML Kit');
     }
   }
 

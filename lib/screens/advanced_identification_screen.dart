@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:camera/camera.dart';
 import '../services/camera_service.dart';
+import '../services/enhanced_identification_service.dart';
 import '../services/identification_service.dart';
 import '../services/database_service.dart';
 import '../models/person.dart';
@@ -23,6 +24,7 @@ class AdvancedIdentificationScreen extends ConsumerStatefulWidget {
 
 class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentificationScreen> {
   late final CameraService _cameraService;
+  late final EnhancedIdentificationService _enhancedIdentificationService;
   late final IdentificationService _identificationService;
   late final DatabaseService _dbService;
 
@@ -43,7 +45,7 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
   
   // Configuración optimizada
   static const Duration _scanInterval = Duration(milliseconds: 600);
-  static const double _threshold = 0.50; // Reducido para embeddings simulados
+  static const double _threshold = 0.6; // Ajustado según requerimiento
   static const int _minConsecutiveDetections = 2;
 
   // Lista de personas registradas en cache
@@ -53,6 +55,7 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
   void initState() {
     super.initState();
     _cameraService = ref.read(cameraServiceProvider);
+    _enhancedIdentificationService = ref.read(enhancedIdentificationServiceProvider);
     _identificationService = ref.read(identificationServiceProvider);
     _dbService = ref.read(databaseServiceProvider);
     _initializeSystem();
@@ -430,14 +433,14 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
       final imagePath = await _cameraService.takePicture();
       if (imagePath == null) return;
 
-      // Identificación usando cache
-      final result = await _identificationService.identifyPerson(
+      // Identificación mejorada con ML Kit
+      final result = await _enhancedIdentificationService.identifyPersonWithMLKit(
         imagePath,
         threshold: _threshold,
-        saveEvent: false, // No guardar eventos en modo automático
+        strictMode: false,
       );
 
-      if (result.isIdentified) {
+      if (result.identified) {
         final person = result.person!;
         
         // Verificar detecciones consecutivas
@@ -502,13 +505,13 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
         _statusMessage = 'Comparando con ${_registeredPersons.length} personas registradas...';
       });
 
-      final result = await _identificationService.identifyPerson(
+      final result = await _enhancedIdentificationService.identifyPersonWithMLKit(
         imagePath,
         threshold: _threshold,
-        saveEvent: true, // Guardar evento en modo manual
+        strictMode: false,
       );
 
-      if (result.isIdentified) {
+      if (result.identified) {
         final person = result.person!;
         final confidence = result.confidence ?? 0.0;
         

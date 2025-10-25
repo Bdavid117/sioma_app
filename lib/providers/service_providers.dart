@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/database_service.dart';
 import '../services/face_embedding_service.dart';
 import '../services/identification_service.dart';
+import '../services/enhanced_identification_service.dart';
 import '../services/camera_service.dart';
 import '../services/photo_quality_analyzer.dart';
 import '../services/face_detection_service.dart';
@@ -23,6 +24,11 @@ final faceEmbeddingServiceProvider = Provider<FaceEmbeddingService>((ref) {
 /// Provider singleton para IdentificationService (identificación 1:N)
 final identificationServiceProvider = Provider<IdentificationService>((ref) {
   return IdentificationService();
+});
+
+/// Provider singleton para EnhancedIdentificationService (NUEVO - con ML Kit)
+final enhancedIdentificationServiceProvider = Provider<EnhancedIdentificationService>((ref) {
+  return EnhancedIdentificationService();
 });
 
 /// Provider singleton para CameraService

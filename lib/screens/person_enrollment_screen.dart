@@ -3,6 +3,7 @@ import '../services/database_service.dart';
 
 import '../services/face_embedding_service.dart';
 import '../services/identification_service.dart';
+import '../services/face_detection_service.dart';
 import '../models/person.dart';
 import '../utils/validation_utils.dart';
 import '../screens/smart_camera_capture_screen.dart';
@@ -21,6 +22,7 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
   final DatabaseService _dbService = DatabaseService();
   final FaceEmbeddingService _embeddingService = FaceEmbeddingService();
   final IdentificationService _identificationService = IdentificationService();
+  final FaceDetectionService _faceDetectionService = FaceDetectionService();
 
   // Controladores de formulario
   final TextEditingController _nameController = TextEditingController();
@@ -31,6 +33,7 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
   EnrollmentStep _currentStep = EnrollmentStep.personalData;
   String? _capturedPhotoPath;
   List<double>? _generatedEmbedding;
+  FaceQualityAnalysis? _faceAnalysis;
   bool _isProcessing = false;
   String _statusMessage = '';
 
@@ -166,10 +169,52 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
 
     setState(() {
       _isProcessing = true;
-      _statusMessage = 'Generando características biométricas...';
+      _statusMessage = 'Analizando calidad facial con ML Kit...';
     });
 
     try {
+      // Paso 1: Validar calidad facial con ML Kit
+      final faceDetectionResult = await _faceDetectionService.detectFaces(_capturedPhotoPath!);
+      
+      if (!faceDetectionResult.success || faceDetectionResult.analysis == null) {
+        await _identificationService.registerAnalysisEvent(
+          imagePath: _capturedPhotoPath!,
+          analysisType: 'ml_kit_validation_failed',
+          wasSuccessful: false,
+          documentId: _documentController.text,
+          personName: _nameController.text,
+          confidence: 0.0,
+          processingTimeMs: 0,
+          metadata: {'error': 'No se detectó un rostro válido'},
+        );
+        
+        if (mounted) {
+          _showError('Calidad Insuficiente', 
+            'No se detectó un rostro de calidad suficiente.\n\n'
+            'Por favor, capture una nueva foto asegurándose de:\n'
+            '• Tener buena iluminación\n'
+            '• Mostrar el rostro completo\n'
+            '• Mantener el rostro centrado\n'
+            '• No usar gafas de sol o mascarilla');
+          
+          setState(() {
+            _isProcessing = false;
+            _statusMessage = '';
+            _currentStep = EnrollmentStep.photoCapture;
+            _capturedPhotoPath = null;
+          });
+        }
+        return;
+      }
+
+      // Guardar análisis facial para metadata
+      _faceAnalysis = faceDetectionResult.analysis!;
+      
+      // Paso 2: Generar embedding
+      setState(() {
+        _statusMessage = 'Generando características biométricas...';
+      });
+      
       // Registrar inicio del proceso de generación
       final startTime = DateTime.now().millisecondsSinceEpoch;
       
@@ -178,7 +223,7 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
       final processingTime = DateTime.now().millisecondsSinceEpoch - startTime;
 
       if (embedding != null && embedding.isNotEmpty) {
-        // Registrar evento de embedding exitoso
+        // Registrar evento de embedding exitoso con metadata ML Kit
         await _identificationService.registerAnalysisEvent(
           imagePath: _capturedPhotoPath!,
           analysisType: 'embedding_generated',
@@ -190,6 +235,9 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
           metadata: {
             'embedding_dimensions': embedding.length,
             'photo_path': _capturedPhotoPath!,
+            'ml_kit_quality': _faceAnalysis!.qualityScore,
+            'face_centered': _faceAnalysis!.isCentered,
+            'head_angle': _faceAnalysis!.headAngle,
           },
         );
 
@@ -197,7 +245,7 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
           setState(() {
             _generatedEmbedding = embedding;
             _currentStep = EnrollmentStep.confirmation;
-            _statusMessage = 'Características biométricas generadas correctamente (${embedding.length}D)';
+            _statusMessage = 'Características biométricas generadas correctamente (${embedding.length}D, calidad: ${_faceAnalysis!.qualityScore.toStringAsFixed(0)}%)';
             _isProcessing = false;
           });
         }
@@ -252,12 +300,32 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
     });
 
     try {
-      // Crear objeto Person con todos los datos validados
+      // Preparar metadata con características faciales ML Kit
+      Map<String, dynamic>? metadata;
+      if (_faceAnalysis != null) {
+        metadata = {
+          'headAngle': _faceAnalysis!.headAngle,
+          'smiling': _faceAnalysis!.smiling,
+          'leftEyeOpen': _faceAnalysis!.leftEyeOpen,
+          'rightEyeOpen': _faceAnalysis!.rightEyeOpen,
+          'registrationQuality': _faceAnalysis!.qualityScore,
+          'isCentered': _faceAnalysis!.isCentered,
+          'boundingBox': {
+            'left': _faceAnalysis!.boundingBox.left,
+            'top': _faceAnalysis!.boundingBox.top,
+            'width': _faceAnalysis!.boundingBox.width,
+            'height': _faceAnalysis!.boundingBox.height,
+          },
+        };
+      }
+      
+      // Crear objeto Person con todos los datos validados y metadata ML Kit
       final person = Person(
         name: _nameController.text,
         documentId: _documentController.text,
         photoPath: _capturedPhotoPath,
         embedding: jsonEncode(_generatedEmbedding),
+        metadata: metadata,
       );
 
       // Guardar en la base de datos con manejo seguro
@@ -278,13 +346,15 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
           'person_id': personId.toString(),
           'embedding_dimensions': _generatedEmbedding!.length,
           'photo_path': _capturedPhotoPath!,
+          'ml_kit_quality': _faceAnalysis?.qualityScore ?? 0,
+          'has_metadata': metadata != null,
         },
       );
 
       // Mostrar éxito y resetear formulario
       setState(() {
         _currentStep = EnrollmentStep.success;
-        _statusMessage = 'Registro completado exitosamente (ID: $personId)';
+        _statusMessage = 'Registro completado exitosamente (ID: $personId, calidad: ${_faceAnalysis?.qualityScore.toStringAsFixed(0) ?? "N/A"}%)';
         _isProcessing = false;
       });
 
