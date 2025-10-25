@@ -2,7 +2,6 @@ from flask import Blueprint, request, jsonify
 from models import Worker
 from extensions import db
 import json
-from services.face_service import encode_face_from_base64
 
 workers_bp = Blueprint('workers', __name__)
 
@@ -29,16 +28,9 @@ def create_worker():
     if existing:
         return jsonify({'error': 'Trabajador ya existe'}), 400
 
-    # Determinar y almacenar el encoding facial si viene la imagen base64
+    # Guardar el encoding facial solo si viene provisto por el cliente (sin procesar imágenes)
     face_encoding_json = None
-    if data.get('face_image_base64'):
-        try:
-            encoding = encode_face_from_base64(data['face_image_base64'])
-            face_encoding_json = json.dumps(encoding)
-        except ValueError as e:
-            return jsonify({'error': str(e)}), 400
-    elif data.get('face_encoding') is not None:
-        # Permitir enviar el encoding ya calculado
+    if data.get('face_encoding') is not None:
         face_encoding_json = json.dumps(data.get('face_encoding'))
 
     worker = Worker(
@@ -52,3 +44,72 @@ def create_worker():
     db.session.add(worker)
     db.session.commit()
     return jsonify(worker.to_dict()), 201
+
+
+@workers_bp.route('/workers/ext/<string:ext_worker_id>', methods=['PUT'])
+def update_worker_by_ext_id(ext_worker_id: str):
+    data = request.get_json() or {}
+    worker = Worker.query.filter_by(worker_id=ext_worker_id).first()
+    if not worker:
+        return jsonify({'error': 'Trabajador no encontrado'}), 404
+
+    # Actualizar campos básicos
+    if 'name' in data:
+        worker.name = data['name']
+    if 'email' in data:
+        worker.email = data['email']
+    if 'phone' in data:
+        worker.phone = data['phone']
+    if 'face_encoding' in data:
+        worker.face_encoding = json.dumps(data['face_encoding']) if data['face_encoding'] is not None else None
+
+    db.session.commit()
+    return jsonify(worker.to_dict())
+
+
+@workers_bp.route('/workers/bulk_upsert', methods=['POST'])
+def bulk_upsert_workers():
+    payload = request.get_json() or {}
+    items = payload.get('workers', [])
+    if not isinstance(items, list) or not items:
+        return jsonify({'error': 'No hay trabajadores para procesar'}), 400
+
+    created = 0
+    updated = 0
+    errors = []
+
+    for idx, item in enumerate(items):
+        try:
+            ext_id = item.get('worker_id')
+            name = item.get('name')
+            if not ext_id or not name:
+                errors.append(f'Item {idx}: faltan worker_id o name')
+                continue
+
+            worker = Worker.query.filter_by(worker_id=ext_id).first()
+            face_encoding_json = json.dumps(item.get('face_encoding')) if item.get('face_encoding') is not None else None
+
+            if worker:
+                # update
+                worker.name = name
+                worker.email = item.get('email')
+                worker.phone = item.get('phone')
+                if 'face_encoding' in item:
+                    worker.face_encoding = face_encoding_json
+                updated += 1
+            else:
+                # create
+                worker = Worker(
+                    worker_id=ext_id,
+                    name=name,
+                    email=item.get('email'),
+                    phone=item.get('phone'),
+                    face_encoding=face_encoding_json,
+                )
+                db.session.add(worker)
+                created += 1
+        except Exception as e:
+            errors.append(f'Item {idx}: {str(e)}')
+
+    db.session.commit()
+    return jsonify({'success': True, 'created': created, 'updated': updated, 'errors': errors})
