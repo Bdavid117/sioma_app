@@ -29,7 +29,7 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 5, // v5: Agregado campo metadata a persons para ML Kit
+      version: 6, // v6: Agregado photo_path y confidence a custom_events
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -231,6 +231,18 @@ class DatabaseService {
       );
       
       DatabaseLogger.info('Upgraded to version 5: Added metadata column to persons for ML Kit');
+    }
+    
+    // Versión 6: Agregar photo_path y confidence a custom_events
+    if (oldVersion < 6) {
+      await db.execute(
+        'ALTER TABLE custom_events ADD COLUMN photo_path TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE custom_events ADD COLUMN confidence REAL',
+      );
+      
+      DatabaseLogger.info('Upgraded to version 6: Added photo_path and confidence columns to custom_events');
     }
   }
 

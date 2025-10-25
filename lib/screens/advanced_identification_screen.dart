@@ -5,7 +5,6 @@ import '../services/camera_service.dart';
 import '../services/enhanced_identification_service.dart';
 import '../services/identification_service.dart';
 import '../services/database_service.dart';
-import '../services/realtime_scanner_service.dart'; // Scanner v2.0
 import '../models/person.dart';
 import '../models/custom_event.dart';
 import '../utils/app_logger.dart';
@@ -28,7 +27,6 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
   late final EnhancedIdentificationService _enhancedIdentificationService;
   late final IdentificationService _identificationService;
   late final DatabaseService _dbService;
-  late final RealtimeScannerService _realtimeScannerService; // Scanner v2.0
 
   // Estados principales
   bool _isScanning = false;
@@ -45,7 +43,7 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
   int _consecutiveDetections = 0;
   Person? _lastDetectedPerson;
   
-  // Estadísticas del scanner v2.0
+  // Estadísticas del scanner
   int _framesProcessed = 0;
   int _facesDetected = 0;
   
@@ -65,19 +63,12 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
     _identificationService = ref.read(identificationServiceProvider);
     _dbService = ref.read(databaseServiceProvider);
     
-    // Inicializar scanner v2.0
-    _realtimeScannerService = RealtimeScannerService(
-      faceDetection: ref.read(faceDetectionServiceProvider),
-      qualityAnalyzer: ref.read(photoQualityAnalyzerProvider),
-      identificationService: _identificationService,
-    );
     _initializeSystem();
   }
 
   @override
   void dispose() {
     _stopScanning();
-    _realtimeScannerService.stopScanning(); // Detener scanner v2.0
     _cameraService.dispose();
     super.dispose();
   }
@@ -419,91 +410,81 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
 
     setState(() {
       _isScanning = true;
-      _statusMessage = 'Scanner v2.0 activo - Buscando rostros...';
+      _statusMessage = 'Scanner activo - Buscando rostros...';
       _framesProcessed = 0;
       _facesDetected = 0;
     });
 
-    AppLogger.info('🚀 Iniciando Realtime Scanner v2.0');
+    AppLogger.info('🚀 Iniciando Auto Scanner con Enhanced Identification');
 
-    // Usar el RealtimeScannerService profesional
-    _realtimeScannerService.startScanning(
-      camera: _cameraService.controller!,
-      intervalSeconds: 2, // Escanear cada 2 segundos
-      onResult: (scanResult) {
+    // Usar Timer para escaneo continuo con EnhancedIdentificationService
+    _scanTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (!_isScanning || !_isAutoMode) {
+        timer.cancel();
+        return;
+      }
+
+      try {
+        // Capturar frame
+        final imagePath = await _cameraService.takePicture();
+        if (imagePath == null) return;
+
+        _framesProcessed++;
+
+        // Usar EnhancedIdentificationService (con ML Kit boost)
+        final result = await _enhancedIdentificationService.identifyPersonWithMLKit(
+          imagePath,
+          threshold: _threshold,
+          strictMode: false,
+        );
+
         if (!mounted) return;
 
-        setState(() {
-          _framesProcessed = scanResult.framesProcessed;
-        });
+        if (result.identified && result.person != null) {
+          // PERSONA IDENTIFICADA ✅
+          setState(() {
+            _identifiedPerson = result.person;
+            _confidence = result.confidence ?? 0.0;
+            _facesDetected++;
+            _statusMessage = '✅ ${result.person!.name} - ${(_confidence * 100).toStringAsFixed(1)}%';
+          });
 
-        switch (scanResult.status) {
-          case ScanStatus.identified:
-            // Persona identificada exitosamente
-            setState(() {
-              _identifiedPerson = scanResult.person;
-              _confidence = scanResult.confidence ?? 0.0;
-              _facesDetected++;
-              _statusMessage = '✅ ${scanResult.person!.name} - ${(_confidence * 100).toStringAsFixed(1)}%';
-            });
+          AppLogger.info('✅ AUTO: ${result.person!.name} identificado (${(_confidence * 100).toStringAsFixed(1)}%)');
 
-            // Vibración o sonido de feedback (opcional)
-            AppLogger.info('✅ Persona identificada: ${scanResult.person!.name}');
+          // Mostrar diálogo de registro de evento
+          _showEventRegistrationDialog(result.person!);
 
-            // Auto-limpiar después de 4 segundos
-            Future.delayed(const Duration(seconds: 4), () {
-              if (mounted && _isAutoMode) {
-                setState(() {
-                  _identifiedPerson = null;
-                  _confidence = 0.0;
-                  _statusMessage = 'Escaneando... (${_framesProcessed} frames, ${_facesDetected} rostros)';
-                });
-              }
-            });
-            break;
-
-          case ScanStatus.notIdentified:
-            // Rostro detectado pero no registrado
-            setState(() {
-              _facesDetected++;
-              _statusMessage = '⚠️ Rostro no registrado - Frames: $_framesProcessed';
-            });
-            break;
-
-          case ScanStatus.noFace:
-            // Sin rostro detectado
-            setState(() {
-              _statusMessage = '🔍 Buscando rostro... (${_framesProcessed} frames procesados)';
-            });
-            break;
-
-          case ScanStatus.poorQuality:
-            // Calidad insuficiente
-            setState(() {
-              _facesDetected++;
-              _statusMessage = '📷 ${scanResult.message} - Mejora la iluminación';
-            });
-            break;
-
-          case ScanStatus.cooldown:
-            // En periodo de espera
-            setState(() {
-              _statusMessage = '⏳ ${scanResult.message}';
-            });
-            break;
-
-          case ScanStatus.error:
-            // Error en el proceso
-            AppLogger.error('Error en scanner: ${scanResult.message}');
-            break;
+          // Auto-limpiar después de 5 segundos
+          Future.delayed(const Duration(seconds: 5), () {
+            if (mounted && _isAutoMode) {
+              setState(() {
+                _identifiedPerson = null;
+                _confidence = 0.0;
+                _statusMessage = 'Escaneando... ($_framesProcessed frames, $_facesDetected rostros)';
+              });
+            }
+          });
+        } else {
+          // No identificado
+          setState(() {
+            _statusMessage = '🔍 Buscando rostro... ($_framesProcessed frames procesados)';
+          });
         }
-      },
-    );
+
+        // Limpiar imagen temporal
+        try {
+          await File(imagePath).delete();
+        } catch (e) {
+          // Ignorar error de limpieza
+        }
+      } catch (e) {
+        AppLogger.error('Error en auto scanner', error: e);
+      }
+    });
   }
 
   void _stopScanning() {
     _scanTimer?.cancel();
-    _realtimeScannerService.stopScanning(); // Detener scanner v2.0
     
     setState(() {
       _isScanning = false;
@@ -511,7 +492,7 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
       _lastDetectedPerson = null;
     });
     
-    AppLogger.info('🛑 Scanner v2.0 detenido - Frames procesados: $_framesProcessed, Rostros: $_facesDetected');
+    AppLogger.info('🛑 Scanner detenido - Frames procesados: $_framesProcessed, Rostros: $_facesDetected');
   }
 
   Future<void> _performQuickScan() async {
