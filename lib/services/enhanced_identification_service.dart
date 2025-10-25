@@ -209,10 +209,13 @@ class EnhancedIdentificationService {
 
       // Si tenemos metadata de la persona registrada, compararla
       if (person.metadata != null && person.metadata!.isNotEmpty) {
+        AppLogger.debug('🔍 Metadata encontrada para ${person.name}: ${person.metadata!.keys.join(", ")}');
         mlKitBoost = _calculateMLKitBoost(
           queryAnalysis: queryFaceAnalysis,
           storedMetadata: person.metadata!,
         );
+      } else {
+        AppLogger.warning('⚠️ NO hay metadata ML Kit para ${person.name} - metadata es ${person.metadata == null ? "null" : "vacío"}');
       }
 
       // Confianza ajustada con boost ML Kit
@@ -316,9 +319,34 @@ class EnhancedIdentificationService {
     required FaceDetectionResult mlKitValidation,
     required int processingTimeMs,
   }) {
-    if (bestMatch != null && bestMatch.adjustedConfidence >= threshold) {
+    // === UMBRAL ADAPTATIVO BASADO EN CALIDAD ML KIT ===
+    double adaptiveThreshold = threshold;
+    
+    if (mlKitValidation.analysis != null) {
+      final quality = mlKitValidation.analysis!.qualityScore;
+      final isCentered = mlKitValidation.analysis!.isCentered;
+      final headAngle = mlKitValidation.analysis!.headAngle.abs();
+      
+      // Reducir umbral si la captura es excelente (calidad 90%+, centrado, ángulo <5°)
+      if (quality >= 90 && isCentered && headAngle < 5) {
+        adaptiveThreshold = threshold * 0.92; // Reducir 8% (60% → 55.2%)
+        AppLogger.debug('🎯 Umbral adaptativo: ${(adaptiveThreshold * 100).toStringAsFixed(1)}% (captura excelente: Q=${quality}%, centro=$isCentered, ángulo=${headAngle.toStringAsFixed(1)}°)');
+      }
+      // Reducir menos si es muy buena (calidad 80%+, centrado)
+      else if (quality >= 80 && isCentered) {
+        adaptiveThreshold = threshold * 0.95; // Reducir 5% (60% → 57%)
+        AppLogger.debug('🎯 Umbral adaptativo: ${(adaptiveThreshold * 100).toStringAsFixed(1)}% (captura muy buena)');
+      }
+      // Reducir mínimamente si es buena (calidad 70%+)
+      else if (quality >= 70) {
+        adaptiveThreshold = threshold * 0.97; // Reducir 3% (60% → 58.2%)
+        AppLogger.debug('🎯 Umbral adaptativo: ${(adaptiveThreshold * 100).toStringAsFixed(1)}% (captura buena)');
+      }
+    }
+    
+    if (bestMatch != null && bestMatch.adjustedConfidence >= adaptiveThreshold) {
       // IDENTIFICACIÓN EXITOSA
-      AppLogger.info('✅ IDENTIFICADO: ${bestMatch.person.name} - ${(bestMatch.adjustedConfidence * 100).toStringAsFixed(1)}%');
+      AppLogger.info('✅ IDENTIFICADO: ${bestMatch.person.name} - ${(bestMatch.adjustedConfidence * 100).toStringAsFixed(1)}% (umbral: ${(adaptiveThreshold * 100).toStringAsFixed(1)}%)');
 
       return EnhancedIdentificationResult.identified(
         person: bestMatch.person,
@@ -332,7 +360,7 @@ class EnhancedIdentificationService {
     } else {
       // NO IDENTIFICADO
       final bestConfidence = bestMatch?.adjustedConfidence ?? 0.0;
-      AppLogger.warning('❌ NO IDENTIFICADO - Mejor: ${bestMatch?.person.name ?? "ninguno"} (${(bestConfidence * 100).toStringAsFixed(1)}%)');
+      AppLogger.warning('❌ NO IDENTIFICADO - Mejor: ${bestMatch?.person.name ?? "ninguno"} (${(bestConfidence * 100).toStringAsFixed(1)}% vs umbral ${(adaptiveThreshold * 100).toStringAsFixed(1)}%)');
 
       return EnhancedIdentificationResult.noMatch(
         message: 'No se encontró coincidencia suficiente',

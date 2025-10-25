@@ -274,13 +274,14 @@ class DatabaseService {
         documentId: documentValidation.value!,
         photoPath: person.photoPath,
         embedding: embeddingValidation.value!,
+        metadata: person.metadata, // ✅ INCLUIR METADATA ML KIT
         createdAt: person.createdAt,
       );
 
       final db = await database;
       final id = await db.insert('persons', validatedPerson.toMap());
 
-      DatabaseLogger.info('Person inserted successfully: ID=$id, Document=${validatedPerson.documentId}');
+      DatabaseLogger.info('Person inserted successfully: ID=$id, Document=${validatedPerson.documentId}, Metadata=${person.metadata != null ? "YES (${person.metadata!.keys.length} fields)" : "NO"}');
       return id;
     } on SiomaValidationException {
       rethrow;

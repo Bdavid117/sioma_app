@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Para FilteringTextInputFormatter
 import '../services/database_service.dart';
 
 import '../services/face_embedding_service.dart';
@@ -317,6 +318,15 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
             'height': _faceAnalysis!.boundingBox.height,
           },
         };
+        
+        // Log de confirmación de metadata
+        print('✅ METADATA ML KIT CREADA PARA REGISTRO:');
+        print('   - Ángulo cabeza: ${metadata['headAngle']}°');
+        print('   - Sonrisa: ${metadata['smiling']}');
+        print('   - Calidad: ${metadata['registrationQuality']}%');
+        print('   - Centrado: ${metadata['isCentered']}');
+      } else {
+        print('⚠️ WARNING: _faceAnalysis es NULL - NO se guardará metadata ML Kit');
       }
       
       // Crear objeto Person con todos los datos validados y metadata ML Kit
@@ -328,8 +338,12 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
         metadata: metadata,
       );
 
+      print('📦 Objeto Person creado con metadata: ${metadata != null ? "SÍ (${metadata.keys.length} campos)" : "NO (null)"}');
+
       // Guardar en la base de datos con manejo seguro
       final personId = await _dbService.insertPerson(person);
+      
+      print('💾 Persona guardada en BD con ID: $personId');
 
       // Registrar evento de análisis exitoso
       await _identificationService.registerAnalysisEvent(
@@ -581,9 +595,13 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
 
             TextFormField(
               controller: _documentController,
+              keyboardType: TextInputType.number, // Teclado numérico
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly, // Solo dígitos numéricos
+              ],
               decoration: const InputDecoration(
                 labelText: 'Número de Documento *',
-                hintText: 'Ingrese el documento de identidad',
+                hintText: 'Ingrese el documento de identidad (solo números)',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.credit_card),
               ),

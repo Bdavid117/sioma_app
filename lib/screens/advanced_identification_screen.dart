@@ -5,6 +5,7 @@ import '../services/camera_service.dart';
 import '../services/enhanced_identification_service.dart';
 import '../services/identification_service.dart';
 import '../services/database_service.dart';
+import '../services/realtime_scanner_service.dart'; // Scanner v2.0
 import '../models/person.dart';
 import '../models/custom_event.dart';
 import '../utils/app_logger.dart';
@@ -27,6 +28,7 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
   late final EnhancedIdentificationService _enhancedIdentificationService;
   late final IdentificationService _identificationService;
   late final DatabaseService _dbService;
+  late final RealtimeScannerService _realtimeScannerService; // Scanner v2.0
 
   // Estados principales
   bool _isScanning = false;
@@ -43,9 +45,13 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
   int _consecutiveDetections = 0;
   Person? _lastDetectedPerson;
   
+  // Estadísticas del scanner v2.0
+  int _framesProcessed = 0;
+  int _facesDetected = 0;
+  
   // Configuración optimizada
   static const Duration _scanInterval = Duration(milliseconds: 600);
-  static const double _threshold = 0.6; // Ajustado según requerimiento
+  static const double _threshold = 0.60; // Umbral base con adaptación automática según calidad ML Kit
   static const int _minConsecutiveDetections = 2;
 
   // Lista de personas registradas en cache
@@ -58,12 +64,20 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
     _enhancedIdentificationService = ref.read(enhancedIdentificationServiceProvider);
     _identificationService = ref.read(identificationServiceProvider);
     _dbService = ref.read(databaseServiceProvider);
+    
+    // Inicializar scanner v2.0
+    _realtimeScannerService = RealtimeScannerService(
+      faceDetection: ref.read(faceDetectionServiceProvider),
+      qualityAnalyzer: ref.read(photoQualityAnalyzerProvider),
+      identificationService: _identificationService,
+    );
     _initializeSystem();
   }
 
   @override
   void dispose() {
     _stopScanning();
+    _realtimeScannerService.stopScanning(); // Detener scanner v2.0
     _cameraService.dispose();
     super.dispose();
   }
@@ -255,10 +269,10 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
           ElevatedButton(
             onPressed: () async {
               Navigator.of(context).pop();
-              // Navegar a la pantalla de registro (índice 0 en el TabBar)
+              // Navegar a la pantalla de registro (índice 2 en NavigationBar)
               if (mounted) {
-                // Usar el DefaultTabController parent para cambiar de pestaña
-                DefaultTabController.of(context).animateTo(0);
+                // Encontrar el MainNavigationScreen y cambiar a la pestaña de Registro
+                Navigator.of(context).popUntil((route) => route.isFirst);
               }
             },
             child: const Text('Registrar Persona'),
@@ -401,30 +415,103 @@ class _AdvancedIdentificationScreenState extends ConsumerState<AdvancedIdentific
   }
 
   void _startAutoScanning() {
-    if (_scanTimer?.isActive == true) return;
+    if (!_cameraService.isInitialized) return;
 
     setState(() {
       _isScanning = true;
-      _statusMessage = 'Escaneando...';
+      _statusMessage = 'Scanner v2.0 activo - Buscando rostros...';
+      _framesProcessed = 0;
+      _facesDetected = 0;
     });
 
-    _scanTimer = Timer.periodic(_scanInterval, (timer) async {
-      if (!_isScanning || !_isAutoMode) {
-        timer.cancel();
-        return;
-      }
+    AppLogger.info('🚀 Iniciando Realtime Scanner v2.0');
 
-      await _performQuickScan();
-    });
+    // Usar el RealtimeScannerService profesional
+    _realtimeScannerService.startScanning(
+      camera: _cameraService.controller!,
+      intervalSeconds: 2, // Escanear cada 2 segundos
+      onResult: (scanResult) {
+        if (!mounted) return;
+
+        setState(() {
+          _framesProcessed = scanResult.framesProcessed;
+        });
+
+        switch (scanResult.status) {
+          case ScanStatus.identified:
+            // Persona identificada exitosamente
+            setState(() {
+              _identifiedPerson = scanResult.person;
+              _confidence = scanResult.confidence ?? 0.0;
+              _facesDetected++;
+              _statusMessage = '✅ ${scanResult.person!.name} - ${(_confidence * 100).toStringAsFixed(1)}%';
+            });
+
+            // Vibración o sonido de feedback (opcional)
+            AppLogger.info('✅ Persona identificada: ${scanResult.person!.name}');
+
+            // Auto-limpiar después de 4 segundos
+            Future.delayed(const Duration(seconds: 4), () {
+              if (mounted && _isAutoMode) {
+                setState(() {
+                  _identifiedPerson = null;
+                  _confidence = 0.0;
+                  _statusMessage = 'Escaneando... (${_framesProcessed} frames, ${_facesDetected} rostros)';
+                });
+              }
+            });
+            break;
+
+          case ScanStatus.notIdentified:
+            // Rostro detectado pero no registrado
+            setState(() {
+              _facesDetected++;
+              _statusMessage = '⚠️ Rostro no registrado - Frames: $_framesProcessed';
+            });
+            break;
+
+          case ScanStatus.noFace:
+            // Sin rostro detectado
+            setState(() {
+              _statusMessage = '🔍 Buscando rostro... (${_framesProcessed} frames procesados)';
+            });
+            break;
+
+          case ScanStatus.poorQuality:
+            // Calidad insuficiente
+            setState(() {
+              _facesDetected++;
+              _statusMessage = '📷 ${scanResult.message} - Mejora la iluminación';
+            });
+            break;
+
+          case ScanStatus.cooldown:
+            // En periodo de espera
+            setState(() {
+              _statusMessage = '⏳ ${scanResult.message}';
+            });
+            break;
+
+          case ScanStatus.error:
+            // Error en el proceso
+            AppLogger.error('Error en scanner: ${scanResult.message}');
+            break;
+        }
+      },
+    );
   }
 
   void _stopScanning() {
     _scanTimer?.cancel();
+    _realtimeScannerService.stopScanning(); // Detener scanner v2.0
+    
     setState(() {
       _isScanning = false;
       _consecutiveDetections = 0;
       _lastDetectedPerson = null;
     });
+    
+    AppLogger.info('🛑 Scanner v2.0 detenido - Frames procesados: $_framesProcessed, Rostros: $_facesDetected');
   }
 
   Future<void> _performQuickScan() async {

@@ -18,7 +18,7 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  int _currentIndex = 0;
+  int _currentIndex = 2; // Iniciar en pestaña "Registrar" (índice 2)
   bool _isDeveloperMode = false;
 
   // Pantallas de producción (para usuarios finales)
