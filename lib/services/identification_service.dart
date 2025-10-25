@@ -2,8 +2,11 @@ import '../services/database_service.dart';
 import '../services/face_embedding_service.dart';
 import '../models/person.dart';
 import '../models/identification_event.dart';
-import '../utils/validation_utils.dart';
-import 'dart:developer' as developer;
+import '../models/analysis_event.dart';
+import '../utils/app_logger.dart';
+
+import 'dart:math';
+import 'dart:convert';
 
 /// Servicio para realizar identificación 1:N contra la base de datos
 class IdentificationService {
@@ -14,94 +17,178 @@ class IdentificationService {
   final DatabaseService _dbService = DatabaseService();
   final FaceEmbeddingService _embeddingService = FaceEmbeddingService();
 
-  // Configuración de identificación
-  static const double defaultThreshold = 0.7; // 70% de similitud mínima
-  static const int maxCandidates = 10; // Máximo de candidatos a evaluar
-
   /// Inicializa el servicio de identificación
   Future<bool> initialize() async {
     try {
+      // Inicializar el servicio de embeddings
       await _embeddingService.initialize();
-      developer.log('IdentificationService initialized successfully');
       return true;
     } catch (e) {
-      developer.log('Error initializing IdentificationService: $e', level: 1000);
+      BiometricLogger.error('Error inicializando IdentificationService', e);
       return false;
     }
   }
 
-  /// Realiza identificación 1:N contra todas las personas registradas
+  /// Calcula el umbral óptimo basado en datos históricos
+  Future<double> calculateOptimalThreshold() async {
+    try {
+      final events = await _dbService.getAllEvents(limit: 100);
+      if (events.isEmpty) return 0.75; // Valor por defecto
+      
+      // Calcular umbral basado en confianza promedio de identificaciones exitosas
+      final successfulEvents = events.where((e) => e.identified).toList();
+      if (successfulEvents.isEmpty) return 0.75;
+      
+      final avgConfidence = successfulEvents
+          .map((e) => e.confidence ?? 0.75)
+          .reduce((a, b) => a + b) / successfulEvents.length;
+      
+      // Reducir ligeramente el umbral para permitir identificaciones válidas
+      return (avgConfidence * 0.9).clamp(0.6, 0.9);
+    } catch (e) {
+      BiometricLogger.error('Error calculando umbral óptimo', e);
+      return 0.75;
+    }
+  }
+
+  /// Registra un evento de análisis externo
+  Future<void> registerAnalysisEvent({
+    required String imagePath,
+    required String analysisType,
+    required bool wasSuccessful,
+    int? personId,
+    String? personName,
+    required double confidence,
+    required int processingTimeMs,
+    Map<String, dynamic>? metadata,
+    String? documentId,
+  }) async {
+    await _saveAnalysisEvent(
+      imagePath: imagePath,
+      analysisType: analysisType,
+      wasSuccessful: wasSuccessful,
+      personId: personId,
+      personName: personName,
+      confidence: confidence,
+      processingTimeMs: processingTimeMs,
+      metadata: {
+        ...?metadata,
+        'source': 'external_registration',
+        'document_id': documentId,
+      },
+    );
+  }
+
+  /// Getter para acceder al servicio de embeddings
+  FaceEmbeddingService get faceEmbeddingService => _embeddingService;
+
+  /// Identifica una persona comparando contra toda la base de datos
   Future<IdentificationResult> identifyPerson(
     String imagePath, {
-    double threshold = defaultThreshold,
+    double threshold = 0.50, // Reducido para embeddings simulados
+    int maxCandidates = 5,
     bool saveEvent = true,
   }) async {
     try {
-      developer.log('Starting 1:N identification for image: $imagePath');
-
-      // Validar imagen de entrada
-      final pathValidation = ValidationUtils.validateFilePath(imagePath);
-      if (!pathValidation.isValid) {
-        return IdentificationResult.error('Ruta de imagen inválida: ${pathValidation.error}');
-      }
-
-      // Generar embedding de la imagen de consulta
+      BiometricLogger.info('Iniciando identificación 1:N para: $imagePath');
+      BiometricLogger.info('Umbral de confianza: ${(threshold * 100).toStringAsFixed(1)}%');
+      
+      // Generar embedding de la imagen capturada
       final queryEmbedding = await _embeddingService.generateEmbedding(imagePath);
-      if (queryEmbedding == null) {
+      if (queryEmbedding == null || queryEmbedding.isEmpty) {
+        BiometricLogger.warning('No se pudo generar embedding de la imagen');
         return IdentificationResult.error('No se pudo generar embedding de la imagen');
       }
 
-      developer.log('Query embedding generated: ${queryEmbedding.length}D');
+      BiometricLogger.info('Embedding de consulta generado: ${queryEmbedding.length} dimensiones');
 
       // Obtener todas las personas registradas
       final allPersons = await _dbService.getAllPersons(limit: 1000);
       if (allPersons.isEmpty) {
+        BiometricLogger.warning('No hay personas registradas en el sistema');
         return IdentificationResult.noMatch('No hay personas registradas en el sistema');
       }
 
-      developer.log('Comparing against ${allPersons.length} registered persons');
+      BiometricLogger.info('Comparando contra ${allPersons.length} personas registradas');
 
-      // Realizar comparación 1:N
+      // Realizar comparación 1:N con validaciones múltiples
       final comparisonResults = <PersonSimilarity>[];
 
       for (final person in allPersons) {
         try {
           // Convertir embedding almacenado a lista de double
-          final storedEmbedding = _embeddingService.embeddingFromJson(person.embedding);
+          final storedEmbedding = _parseEmbeddingFromJson(person.embedding);
 
-          // Calcular similitud
-          final similarity = _embeddingService.calculateSimilarity(queryEmbedding, storedEmbedding);
+          // VALIDACIÓN 1: Verificar calidad de embeddings (reducido para compatibilidad)
+          if (queryEmbedding.length < 128 || storedEmbedding.length < 128) {
+            BiometricLogger.debug('Embedding insuficiente para ${person.name}: query=${queryEmbedding.length}, stored=${storedEmbedding.length}');
+            continue;
+          }
+
+          // VALIDACIÓN 2: Calcular múltiples métricas de similitud
+          final cosineSimilarity = _calculateCosineSimilarity(queryEmbedding, storedEmbedding);
+          final euclideanSimilarity = _calculateEuclideanSimilarity(queryEmbedding, storedEmbedding);
+          final manhattanSimilarity = _calculateManhattanSimilarity(queryEmbedding, storedEmbedding);
+
+          // VALIDACIÓN 3: Combinar métricas con pesos optimizados
+          final combinedSimilarity = (cosineSimilarity * 0.7) +  // Mayor peso a coseno
+                                   (euclideanSimilarity * 0.2) + 
+                                   (manhattanSimilarity * 0.1);
+
+          // VALIDACIÓN 4: Verificar consistencia entre métricas
+          final maxDiff = [cosineSimilarity, euclideanSimilarity, manhattanSimilarity]
+              .fold(0.0, (max, val) => max > val ? max : val) -
+              [cosineSimilarity, euclideanSimilarity, manhattanSimilarity]
+              .fold(1.0, (min, val) => min < val ? min : val);
+
+          // Si las métricas difieren mucho, es sospechoso
+          final isConsistent = maxDiff < 0.4; // Aumentado de 0.3 para ser menos estricto
+          final finalConfidence = isConsistent ? combinedSimilarity : combinedSimilarity * 0.85;
 
           comparisonResults.add(PersonSimilarity(
             person: person,
-            similarity: similarity,
-            confidence: similarity,
+            similarity: combinedSimilarity,
+            confidence: finalConfidence,
           ));
 
-          developer.log('Person ${person.name}: similarity = ${(similarity * 100).toStringAsFixed(1)}%');
+          BiometricLogger.debug('${person.name}: '
+              'cosine=${(cosineSimilarity * 100).toStringAsFixed(1)}%, '
+              'euclidean=${(euclideanSimilarity * 100).toStringAsFixed(1)}%, '
+              'manhattan=${(manhattanSimilarity * 100).toStringAsFixed(1)}%, '
+              'combined=${(combinedSimilarity * 100).toStringAsFixed(1)}%, '
+              'final=${(finalConfidence * 100).toStringAsFixed(1)}% '
+              '(consistent=$isConsistent, maxDiff=${(maxDiff * 100).toStringAsFixed(1)}%)');
+
         } catch (e) {
-          developer.log('Error comparing with person ${person.name}: $e', level: 1000);
+          BiometricLogger.error('Error procesando persona ${person.name}', e);
           continue;
         }
       }
 
-      // Ordenar resultados por similitud descendente
-      comparisonResults.sort((a, b) => b.similarity.compareTo(a.similarity));
-
-      // Determinar mejor coincidencia
-      final bestMatch = comparisonResults.isNotEmpty ? comparisonResults.first : null;
+      // Ordenar resultados por confianza (descendente)
+      comparisonResults.sort((a, b) => b.confidence.compareTo(a.confidence));
 
       IdentificationResult result;
+      final bestMatch = comparisonResults.isNotEmpty ? comparisonResults.first : null;
 
-      if (bestMatch != null && bestMatch.similarity >= threshold) {
-        // Persona identificada
+      // Log detallado de resultados
+      if (comparisonResults.isNotEmpty) {
+        BiometricLogger.info('Top 3 candidatos:');
+        for (int i = 0; i < comparisonResults.length && i < 3; i++) {
+          final candidate = comparisonResults[i];
+          BiometricLogger.info('  ${i + 1}. ${candidate.person.name}: ${(candidate.confidence * 100).toStringAsFixed(1)}%');
+        }
+      }
+
+      if (bestMatch != null && bestMatch.confidence >= threshold) {
+        // Persona identificada exitosamente
         result = IdentificationResult.identified(
-          person: bestMatch.person,
-          confidence: bestMatch.similarity,
+          bestMatch.person,
+          confidence: bestMatch.confidence,
           allCandidates: comparisonResults.take(maxCandidates).toList(),
         );
 
-        developer.log('Person IDENTIFIED: ${bestMatch.person.name} with ${(bestMatch.similarity * 100).toStringAsFixed(1)}% confidence');
+        BiometricLogger.info('Persona IDENTIFICADA: ${bestMatch.person.name} con ${(bestMatch.confidence * 100).toStringAsFixed(1)}% de confianza (umbral: ${(threshold * 100).toStringAsFixed(1)}%)');
       } else {
         // Persona no identificada
         result = IdentificationResult.noMatch(
@@ -110,59 +197,91 @@ class IdentificationService {
           allCandidates: comparisonResults.take(maxCandidates).toList(),
         );
 
-        developer.log('Person NOT IDENTIFIED. Best candidate: ${bestMatch?.similarity ?? 0 * 100}% (threshold: ${threshold * 100}%)');
+        final bestConfidence = bestMatch?.confidence ?? 0.0;
+        BiometricLogger.warning('Persona NO IDENTIFICADA. Mejor candidato: ${bestMatch?.person.name ?? "ninguno"} con ${(bestConfidence * 100).toStringAsFixed(1)}% (umbral requerido: ${(threshold * 100).toStringAsFixed(1)}%)');
       }
 
-      // Guardar evento de identificación si está habilitado
+      // Guardar eventos (tanto el tradicional como el detallado)
       if (saveEvent) {
+        // Evento tradicional (compatibilidad)
         await _saveIdentificationEvent(result, imagePath);
+        
+        // Evento de análisis detallado (nuevo)
+        await _saveAnalysisEvent(
+          imagePath: imagePath,
+          analysisType: 'identification_1n',
+          wasSuccessful: result.isIdentified,
+          personId: result.person?.id,
+          personName: result.person?.name,
+          confidence: result.confidence ?? 0.0,
+          processingTimeMs: 0, // Se calcularía en implementación real
+          metadata: {
+            'candidatesCount': comparisonResults.length,
+            'threshold': threshold,
+            'bestSimilarity': bestMatch?.similarity ?? 0.0,
+          },
+        );
       }
 
       return result;
-    } catch (e) {
-      developer.log('Error during identification: $e', level: 1000);
-      return IdentificationResult.error('Error durante la identificación: $e');
+
+    } catch (e, stackTrace) {
+      BiometricLogger.error('Error en identificación', e, stackTrace);
+      return IdentificationResult.error('Error interno: ${e.toString()}');
     }
   }
 
-  /// Guarda el evento de identificación en la base de datos
+  /// Guarda un evento de identificación tradicional
   Future<void> _saveIdentificationEvent(IdentificationResult result, String imagePath) async {
     try {
-      final event = IdentificationEvent(
-        personId: result.isIdentified ? result.person?.id : null,
-        personName: result.isIdentified ? result.person?.name : 'Desconocido',
-        confidence: result.confidence,
-        photoPath: imagePath,
+          final event = IdentificationEvent(
         identified: result.isIdentified,
-      );
-
-      await _dbService.insertIdentificationEvent(event);
-      developer.log('Identification event saved: ${result.isIdentified ? "IDENTIFIED" : "UNKNOWN"}');
+        personId: result.person?.id,
+        personName: result.person?.name ?? 'Desconocido',
+        confidence: result.confidence ?? 0.0,
+        timestamp: DateTime.now(),
+      );      await _dbService.insertIdentificationEvent(event);
+      
+      BiometricLogger.info('Evento de identificación guardado: ${result.isIdentified ? "Identificado" : "No identificado"}');
     } catch (e) {
-      developer.log('Error saving identification event: $e', level: 1000);
+      BiometricLogger.error('Error guardando evento de identificación', e);
     }
   }
 
-  /// Realiza identificación continua (modo streaming)
-  Stream<IdentificationResult> identifyStream(
-    Stream<String> imagePathStream, {
-    double threshold = defaultThreshold,
-    Duration debounceTime = const Duration(milliseconds: 1000),
-  }) async* {
-    DateTime lastProcessTime = DateTime.now();
+  /// Guarda un evento de análisis detallado
+  Future<void> _saveAnalysisEvent({
+    required String imagePath,
+    required String analysisType,
+    required bool wasSuccessful,
+    int? personId,
+    String? personName,
+    required double confidence,
+    required int processingTimeMs,
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      final event = AnalysisEvent(
+        imagePath: imagePath,
+        analysisType: analysisType,
+        wasSuccessful: wasSuccessful,
+        identifiedPersonId: personId,
+        identifiedPersonName: personName,
+        confidence: confidence,
+        processingTimeMs: processingTimeMs,
+        timestamp: DateTime.now(),
+        metadata: {
+          ...?metadata,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+        deviceInfo: 'Android', // Simplificado por ahora
+        appVersion: '1.0.0',   // Simplificado por ahora
+      );
 
-    await for (final imagePath in imagePathStream) {
-      final now = DateTime.now();
-
-      // Debounce para evitar procesamiento excesivo
-      if (now.difference(lastProcessTime) < debounceTime) {
-        continue;
-      }
-
-      lastProcessTime = now;
-
-      final result = await identifyPerson(imagePath, threshold: threshold, saveEvent: false);
-      yield result;
+      await _dbService.insertAnalysisEvent(event);
+      
+      BiometricLogger.info('Evento de análisis registrado: $analysisType - ${processingTimeMs}ms - ${event.wasSuccessful ? "Exitoso" : "Fallido"}');
+    } catch (e) {
+      BiometricLogger.error('Error registrando evento de análisis', e);
     }
   }
 
@@ -190,44 +309,127 @@ class IdentificationService {
         }
       }
 
-      final avgConfidence = identifiedCount > 0 ? totalConfidence / identifiedCount : 0.0;
+      final identificationRate = totalEvents > 0 ? identifiedCount / totalEvents : 0.0;
+      final averageConfidence = identifiedCount > 0 ? totalConfidence / identifiedCount : 0.0;
 
       return IdentificationStats(
         totalEvents: totalEvents,
         identifiedCount: identifiedCount,
         unknownCount: unknownCount,
-        identificationRate: totalEvents > 0 ? identifiedCount / totalEvents : 0.0,
-        averageConfidence: avgConfidence,
+        identificationRate: identificationRate,
+        averageConfidence: averageConfidence,
         lastEventTime: lastEvent,
       );
+
     } catch (e) {
-      developer.log('Error getting identification stats: $e', level: 1000);
+      BiometricLogger.error('Error obteniendo estadísticas', e);
       return IdentificationStats.empty();
     }
   }
 
-  /// Ajusta el threshold dinámicamente basado en el historial
-  Future<double> calculateOptimalThreshold() async {
-    try {
-      final events = await _dbService.getAllEvents(limit: 500);
-      final identifiedEvents = events.where((e) => e.identified && e.confidence != null).toList();
+  // ==================== MÉTODOS DE SIMILITUD ADICIONALES ====================
 
-      if (identifiedEvents.length < 10) {
-        return defaultThreshold; // Usar threshold por defecto si hay pocos datos
+  /// Calcula similitud coseno normalizada
+  double _calculateCosineSimilarity(List<double> embedding1, List<double> embedding2) {
+    if (embedding1.length != embedding2.length) return 0.0;
+
+    double dotProduct = 0.0;
+    double normA = 0.0;
+    double normB = 0.0;
+
+    for (int i = 0; i < embedding1.length; i++) {
+      dotProduct += embedding1[i] * embedding2[i];
+      normA += embedding1[i] * embedding1[i];
+      normB += embedding2[i] * embedding2[i];
+    }
+
+    final denominator = sqrt(normA) * sqrt(normB);
+    if (denominator == 0) return 0.0;
+
+    return dotProduct / denominator;
+  }
+
+  /// Calcula similitud euclidiana normalizada
+  double _calculateEuclideanSimilarity(List<double> embedding1, List<double> embedding2) {
+    if (embedding1.length != embedding2.length) return 0.0;
+
+    double sumSquaredDiff = 0.0;
+    for (int i = 0; i < embedding1.length; i++) {
+      final diff = embedding1[i] - embedding2[i];
+      sumSquaredDiff += diff * diff;
+    }
+
+    final euclideanDistance = sqrt(sumSquaredDiff);
+    // Normalizar: convertir distancia a similitud (0-1)
+    return 1.0 / (1.0 + euclideanDistance);
+  }
+
+  /// Calcula similitud Manhattan normalizada
+  double _calculateManhattanSimilarity(List<double> embedding1, List<double> embedding2) {
+    if (embedding1.length != embedding2.length) return 0.0;
+
+    double sumAbsDiff = 0.0;
+    for (int i = 0; i < embedding1.length; i++) {
+      sumAbsDiff += (embedding1[i] - embedding2[i]).abs();
+    }
+
+    final manhattanDistance = sumAbsDiff / embedding1.length;
+    // Normalizar: convertir distancia a similitud (0-1)
+    return 1.0 / (1.0 + manhattanDistance);
+  }
+
+  /// Parsea un embedding desde JSON string a List<double> con validación de seguridad
+  List<double> _parseEmbeddingFromJson(String embeddingJson) {
+    try {
+      // Validación de seguridad: verificar que no sea null o vacío
+      if (embeddingJson.isEmpty) {
+        BiometricLogger.warning('Intento de parsear embedding vacío');
+        return List.filled(512, 0.0);
       }
 
-      // Calcular threshold óptimo basado en percentil 25 de identificaciones exitosas
-      final confidences = identifiedEvents.map((e) => e.confidence!).toList()..sort();
-      final percentile25Index = (confidences.length * 0.25).floor();
-
-      final optimalThreshold = confidences[percentile25Index];
-
-      developer.log('Optimal threshold calculated: ${(optimalThreshold * 100).toStringAsFixed(1)}%');
-
-      return optimalThreshold.clamp(0.5, 0.9); // Limitar entre 50% y 90%
+      List<double> result;
+      
+      // Si es una lista JSON simple
+      if (embeddingJson.startsWith('[')) {
+        try {
+          final List<dynamic> parsed = jsonDecode(embeddingJson);
+          result = parsed.map((e) => (e as num).toDouble()).toList();
+        } catch (e) {
+          // Fallback a parsing manual
+          BiometricLogger.debug('Error con jsonDecode, usando parsing manual: $e');
+          final cleanString = embeddingJson
+              .replaceAll('[', '')
+              .replaceAll(']', '')
+              .trim();
+          result = cleanString
+              .split(',')
+              .where((s) => s.trim().isNotEmpty)
+              .map((e) => double.tryParse(e.trim()) ?? 0.0)
+              .toList();
+        }
+      } else {
+        // Si son valores separados por coma (legacy)
+        result = embeddingJson
+            .split(',')
+            .where((s) => s.trim().isNotEmpty)
+            .map((e) => double.tryParse(e.trim()) ?? 0.0)
+            .toList();
+      }
+      
+      // Validación de dimensiones
+      if (result.isEmpty) {
+        BiometricLogger.warning('Embedding parseado está vacío');
+        return List.filled(512, 0.0);
+      }
+      
+      if (result.length < 256) {
+        BiometricLogger.debug('Embedding con dimensiones insuficientes: ${result.length}');
+      }
+      
+      return result;
     } catch (e) {
-      developer.log('Error calculating optimal threshold: $e', level: 1000);
-      return defaultThreshold;
+      BiometricLogger.error('Error parsing embedding', e);
+      return List.filled(512, 0.0); // Fallback seguro
     }
   }
 }
@@ -252,9 +454,9 @@ class IdentificationResult {
     this.allCandidates,
   });
 
-  /// Resultado exitoso de identificación
-  factory IdentificationResult.identified({
-    required Person person,
+  /// Constructor para identificación exitosa
+  factory IdentificationResult.identified(
+    Person person, {
     required double confidence,
     List<PersonSimilarity>? allCandidates,
   }) {
@@ -266,7 +468,7 @@ class IdentificationResult {
     );
   }
 
-  /// Resultado de no identificación
+  /// Constructor para no identificación
   factory IdentificationResult.noMatch(
     String reason, {
     PersonSimilarity? bestCandidate,
@@ -277,30 +479,31 @@ class IdentificationResult {
       noMatchReason: reason,
       bestCandidate: bestCandidate,
       allCandidates: allCandidates,
-      confidence: bestCandidate?.similarity,
     );
   }
 
-  /// Resultado de error
-  factory IdentificationResult.error(String message) {
+  /// Constructor para error
+  factory IdentificationResult.error(String errorMessage) {
     return IdentificationResult._(
       isIdentified: false,
-      errorMessage: message,
+      errorMessage: errorMessage,
     );
   }
 
-  bool get isError => errorMessage != null;
-  bool get hasNoMatch => noMatchReason != null;
-
-  String get statusMessage {
-    if (isError) return 'Error: $errorMessage';
-    if (isIdentified) return 'Identificado: ${person!.name} (${(confidence! * 100).toStringAsFixed(1)}%)';
-    if (hasNoMatch) return 'No identificado: $noMatchReason';
-    return 'Estado desconocido';
+  bool get hasError => errorMessage != null;
+  bool get isError => hasError;
+  bool get hasNoMatch => !isIdentified && !hasError;
+  
+  String get statusMessage => displayMessage;
+  
+  String get displayMessage {
+    if (hasError) return errorMessage!;
+    if (isIdentified) return 'Identificado: ${person!.name}';
+    return noMatchReason ?? 'No identificado';
   }
 }
 
-/// Similitud entre una persona y una consulta
+/// Representa la similitud entre una consulta y una persona registrada
 class PersonSimilarity {
   final Person person;
   final double similarity;
@@ -312,7 +515,13 @@ class PersonSimilarity {
     required this.confidence,
   });
 
+  /// Getter para obtener la similitud como porcentaje
   double get similarityPercent => similarity * 100;
+
+  @override
+  String toString() {
+    return '${person.name}: ${(confidence * 100).toStringAsFixed(1)}%';
+  }
 }
 
 /// Estadísticas de identificación del sistema

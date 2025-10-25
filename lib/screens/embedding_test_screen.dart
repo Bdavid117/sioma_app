@@ -17,7 +17,7 @@ class _EmbeddingTestScreenState extends State<EmbeddingTestScreen> {
   final CameraService _cameraService = CameraService();
 
   List<File> _testImages = [];
-  Map<String, List<double>> _imageEmbeddings = {};
+  final Map<String, List<double>> _imageEmbeddings = {};
   String _statusMessage = '';
   bool _isLoading = false;
   bool _isInitialized = false;

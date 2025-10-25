@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import '../services/camera_service.dart';
+import '../utils/app_logger.dart';
 import 'dart:io';
 
 /// Pantalla para capturar fotos de rostro usando la cámara
@@ -24,7 +25,9 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   final CameraService _cameraService = CameraService();
   bool _isLoading = true;
   String _statusMessage = 'Inicializando cámara...';
-  String? _lastCapturedPhoto;
+  CameraController? _cameraController;
+  Future<void>? _initializeControllerFuture;
+  bool _isCapturing = false;
 
   @override
   void initState() {
@@ -62,16 +65,11 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
       if (photoPath != null) {
         setState(() {
-          _lastCapturedPhoto = photoPath;
           _statusMessage = 'Foto capturada exitosamente';
         });
 
-        // Callback opcional para notificar que se tomó una foto
-        if (widget.onPhotoTaken != null) {
-          widget.onPhotoTaken!(photoPath);
-        }
-
-        // Mostrar preview de la foto capturada
+        // NO ejecutar callback aquí - evita duplicación
+        // Solo mostrar preview para confirmación del usuario
         _showPhotoPreview(photoPath);
       } else {
         setState(() {
@@ -106,6 +104,7 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
   void _showPhotoPreview(String photoPath) {
     showDialog(
       context: context,
+      barrierDismissible: false, // Evitar cierre accidental
       builder: (context) => AlertDialog(
         title: const Text('Foto Capturada'),
         content: Column(
@@ -118,6 +117,15 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
                 width: 200,
                 height: 200,
                 fit: BoxFit.cover,
+                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                  if (wasSynchronouslyLoaded) return child;
+                  return AnimatedOpacity(
+                    opacity: frame == null ? 0 : 1,
+                    duration: const Duration(seconds: 1),
+                    curve: Curves.easeOut,
+                    child: child,
+                  );
+                },
               ),
             ),
             const SizedBox(height: 16),
@@ -130,19 +138,60 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
               const SizedBox(height: 8),
             ],
             Text('Guardada en: ${photoPath.split('/').last}'),
+            const SizedBox(height: 8),
+            const Text(
+              '¿Desea usar esta foto?',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+            ),
           ],
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context, photoPath); // Retornar ruta de la foto
+            onPressed: () async {
+              Navigator.pop(context); // Cerrar dialog primero
+              
+              // Mostrar indicador de procesamiento
+              setState(() {
+                _statusMessage = 'Procesando foto...';
+              });
+              
+              // Ejecutar callback SOLO cuando el usuario confirma
+              if (widget.onPhotoTaken != null) {
+                widget.onPhotoTaken!(photoPath);
+              }
+              
+              // Cerrar cámara de forma segura
+              try {
+                _cameraService.disposeSync();
+              } catch (e) {
+                CameraLogger.warning('Error disposing camera: $e');
+              }
+              
+              // Retornar con delay mínimo para evitar congelamiento
+              await Future.delayed(const Duration(milliseconds: 50));
+              if (mounted) {
+                Navigator.pop(context, photoPath);
+              }
             },
-            child: const Text('Usar Esta Foto'),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.check, color: Colors.green),
+                SizedBox(width: 8),
+                Text('Usar Esta Foto'),
+              ],
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Tomar Otra'),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.refresh, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('Tomar Otra'),
+              ],
+            ),
           ),
         ],
       ),
@@ -288,7 +337,20 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
           // Botón cerrar
           IconButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () async {
+              // Cerrar cámara de forma segura antes de salir
+              try {
+                _cameraService.disposeSync();
+              } catch (e) {
+                CameraLogger.warning('Error disposing camera: $e');
+              }
+              
+              // Delay para permitir que la cámara se cierre correctamente
+              await Future.delayed(const Duration(milliseconds: 200));
+              if (mounted) {
+                Navigator.pop(context);
+              }
+            },
             icon: const Icon(
               Icons.close,
               color: Colors.white,
@@ -318,7 +380,15 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen> {
 
   @override
   void dispose() {
-    _cameraService.dispose();
+    // Disposición segura de la cámara para prevenir crashes
+    Future.microtask(() async {
+      try {
+        await _cameraService.dispose();
+      } catch (e) {
+        // Silenciosamente manejar errores de disposición
+        CameraLogger.warning('Error disposing camera: $e');
+      }
+    });
     super.dispose();
   }
 }

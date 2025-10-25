@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'identification_screen.dart';
-import 'realtime_scanner_screen.dart';
+import 'advanced_identification_screen.dart';
+import 'events_screen.dart';
 import 'person_enrollment_screen.dart';
 import 'registered_persons_screen.dart';
 import 'database_test_screen.dart';
@@ -23,8 +23,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   // Pantallas de producción (para usuarios finales)
   final List<Widget> _productionScreens = [
-    const IdentificationScreen(),
-    const RealTimeScannerScreen(),
+    const AdvancedIdentificationScreen(),
+    const EventsScreen(),
     const PersonEnrollmentScreen(),
     const RegisteredPersonsScreen(),
     const DeveloperPanelScreen(),
@@ -32,8 +32,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   // Pantallas de desarrollo (para técnicos/desarrolladores)
   final List<Widget> _developerScreens = [
-    const IdentificationScreen(),
-    const RealTimeScannerScreen(),
+    const AdvancedIdentificationScreen(),
+    const EventsScreen(),
     const PersonEnrollmentScreen(),
     const RegisteredPersonsScreen(),
     const DatabaseTestScreen(),
@@ -44,14 +44,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   // Navegación de producción
   final List<NavigationDestination> _productionDestinations = [
     const NavigationDestination(
-      icon: Icon(Icons.person_search),
-      selectedIcon: Icon(Icons.person_search_outlined),
+      icon: Icon(Icons.face_retouching_natural),
+      selectedIcon: Icon(Icons.face_retouching_natural_outlined),
       label: 'Identificar',
     ),
     const NavigationDestination(
-      icon: Icon(Icons.scanner),
-      selectedIcon: Icon(Icons.scanner_outlined),
-      label: 'Scanner',
+      icon: Icon(Icons.event_note),
+      selectedIcon: Icon(Icons.event_note_outlined),
+      label: 'Eventos',
     ),
     const NavigationDestination(
       icon: Icon(Icons.person_add_alt_1),
@@ -73,14 +73,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   // Navegación de desarrollador
   final List<NavigationDestination> _developerDestinations = [
     const NavigationDestination(
-      icon: Icon(Icons.person_search),
-      selectedIcon: Icon(Icons.person_search_outlined),
-      label: 'Identificar',
+      icon: Icon(Icons.face_retouching_natural),
+      selectedIcon: Icon(Icons.face_retouching_natural_outlined),
+      label: 'ID/Scanner',
     ),
     const NavigationDestination(
-      icon: Icon(Icons.scanner),
-      selectedIcon: Icon(Icons.scanner_outlined),
-      label: 'Scanner',
+      icon: Icon(Icons.event_note),
+      selectedIcon: Icon(Icons.event_note_outlined),
+      label: 'Eventos',
     ),
     const NavigationDestination(
       icon: Icon(Icons.person_add_alt_1),

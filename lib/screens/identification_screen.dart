@@ -3,6 +3,7 @@ import '../services/identification_service.dart';
 import '../services/database_service.dart';
 import '../screens/camera_capture_screen.dart';
 import '../models/person.dart';
+import '../utils/app_logger.dart';
 import 'dart:io';
 
 /// Pantalla principal de identificación 1:N en tiempo real
@@ -71,7 +72,7 @@ class _IdentificationScreenState extends State<IdentificationScreen> {
         _stats = stats;
       });
     } catch (e) {
-      print('Error loading stats: $e');
+      BiometricLogger.error('Error loading stats', e);
     }
   }
 

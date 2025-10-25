@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
-import '../services/camera_service.dart';
+
 import '../services/face_embedding_service.dart';
+import '../services/identification_service.dart';
 import '../models/person.dart';
 import '../utils/validation_utils.dart';
 import '../screens/camera_capture_screen.dart';
@@ -19,6 +20,7 @@ class PersonEnrollmentScreen extends StatefulWidget {
 class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
   final DatabaseService _dbService = DatabaseService();
   final FaceEmbeddingService _embeddingService = FaceEmbeddingService();
+  final IdentificationService _identificationService = IdentificationService();
 
   // Controladores de formulario
   final TextEditingController _nameController = TextEditingController();
@@ -105,6 +107,11 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
   /// Captura la foto biométrica
   Future<void> _capturePhoto() async {
     try {
+      setState(() {
+        _isProcessing = true;
+        _statusMessage = 'Abriendo cámara...';
+      });
+
       final result = await Navigator.push<String>(
         context,
         MaterialPageRoute(
@@ -112,26 +119,39 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
             personName: _nameController.text,
             documentId: _documentController.text,
             onPhotoTaken: (photoPath) {
-              setState(() {
-                _capturedPhotoPath = photoPath;
-                _statusMessage = 'Foto capturada exitosamente';
-              });
+              // Callback vacío para evitar duplicación
+              // El procesamiento se hará cuando se retorne el result
             },
           ),
         ),
       );
 
-      if (result != null) {
+      // Esperar un momento después de cerrar la cámara
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      if (result != null && mounted) {
         setState(() {
           _capturedPhotoPath = result;
           _currentStep = EnrollmentStep.embeddingGeneration;
           _statusMessage = 'Foto capturada. Generando características biométricas...';
+          _isProcessing = true; // Mantener indicador de procesamiento
         });
 
-        // Generar embedding automáticamente
-        await _generateEmbedding();
+        // Generar embedding automáticamente con delay más corto
+        await Future.delayed(const Duration(milliseconds: 200));
+        if (mounted) {
+          await _generateEmbedding();
+        }
+      } else {
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = 'Captura cancelada';
+        });
       }
     } catch (e) {
+      setState(() {
+        _isProcessing = false;
+      });
       _showError('Error de cámara', 'No se pudo capturar la foto: $e');
     }
   }
@@ -149,19 +169,71 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
     });
 
     try {
+      // Registrar inicio del proceso de generación
+      final startTime = DateTime.now().millisecondsSinceEpoch;
+      
       final embedding = await _embeddingService.generateEmbedding(_capturedPhotoPath!);
 
-      if (embedding != null) {
-        setState(() {
-          _generatedEmbedding = embedding;
-          _currentStep = EnrollmentStep.confirmation;
-          _statusMessage = 'Características biométricas generadas correctamente (${embedding.length}D)';
-          _isProcessing = false;
-        });
+      final processingTime = DateTime.now().millisecondsSinceEpoch - startTime;
+
+      if (embedding != null && embedding.isNotEmpty) {
+        // Registrar evento de embedding exitoso
+        await _identificationService.registerAnalysisEvent(
+          imagePath: _capturedPhotoPath!,
+          analysisType: 'embedding_generated',
+          wasSuccessful: true,
+          documentId: _documentController.text,
+          personName: _nameController.text,
+          confidence: 1.0,
+          processingTimeMs: processingTime,
+          metadata: {
+            'embedding_dimensions': embedding.length,
+            'photo_path': _capturedPhotoPath!,
+          },
+        );
+
+        if (mounted) {
+          setState(() {
+            _generatedEmbedding = embedding;
+            _currentStep = EnrollmentStep.confirmation;
+            _statusMessage = 'Características biométricas generadas correctamente (${embedding.length}D)';
+            _isProcessing = false;
+          });
+        }
       } else {
+        // Registrar evento de error en embedding
+        await _identificationService.registerAnalysisEvent(
+          imagePath: _capturedPhotoPath!,
+          analysisType: 'embedding_failed',
+          wasSuccessful: false,
+          documentId: _documentController.text,
+          personName: _nameController.text,
+          confidence: 0.0,
+          processingTimeMs: processingTime,
+          metadata: {
+            'error': 'Null or empty embedding returned',
+            'photo_path': _capturedPhotoPath!,
+          },
+        );
+        
         _showError('Error biométrico', 'No se pudieron generar las características biométricas de la imagen');
       }
     } catch (e) {
+      // Registrar evento de excepción
+      await _identificationService.registerAnalysisEvent(
+        imagePath: _capturedPhotoPath ?? 'unknown',
+        analysisType: 'embedding_exception',
+        wasSuccessful: false,
+        documentId: _documentController.text,
+        personName: _nameController.text,
+        confidence: 0.0,
+        processingTimeMs: 0,
+        metadata: {
+          'error': e.toString(),
+          'photo_path': _capturedPhotoPath!,
+        },
+      );
+      
       _showError('Error de procesamiento', 'Error al procesar la imagen: $e');
     }
   }
@@ -187,8 +259,26 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
         embedding: jsonEncode(_generatedEmbedding),
       );
 
-      // Guardar en la base de datos
+      // Guardar en la base de datos con manejo seguro
       final personId = await _dbService.insertPerson(person);
+
+      // Registrar evento de análisis exitoso
+      await _identificationService.registerAnalysisEvent(
+        imagePath: _capturedPhotoPath!,
+        analysisType: 'registration_completed',
+        wasSuccessful: true,
+        personId: personId,
+        documentId: _documentController.text,
+        personName: _nameController.text,
+        confidence: 1.0,
+        processingTimeMs: DateTime.now().millisecondsSinceEpoch - 
+                        DateTime.now().subtract(const Duration(seconds: 1)).millisecondsSinceEpoch,
+        metadata: {
+          'person_id': personId.toString(),
+          'embedding_dimensions': _generatedEmbedding!.length,
+          'photo_path': _capturedPhotoPath!,
+        },
+      );
 
       // Mostrar éxito y resetear formulario
       setState(() {
@@ -199,9 +289,26 @@ class _PersonEnrollmentScreenState extends State<PersonEnrollmentScreen> {
 
       // Auto-reset después de 3 segundos
       Future.delayed(const Duration(seconds: 3), () {
-        _resetForm();
+        if (mounted) {
+          _resetForm();
+        }
       });
     } catch (e) {
+      // Registrar evento de error
+      await _identificationService.registerAnalysisEvent(
+        imagePath: _capturedPhotoPath ?? 'unknown',
+        analysisType: 'registration_failed',
+        wasSuccessful: false,
+        documentId: _documentController.text,
+        personName: _nameController.text,
+        confidence: 0.0,
+        processingTimeMs: 0,
+        metadata: {
+          'error': e.toString(),
+          'step': 'database_insert',
+        },
+      );
+      
       _showError('Error de registro', 'No se pudo completar el registro: $e');
     }
   }

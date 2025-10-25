@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../models/person.dart';
-import '../utils/validation_utils.dart';
+
 import 'dart:io';
 
 /// Pantalla para gestionar las personas registradas en el sistema

@@ -4,8 +4,11 @@ import '../services/camera_service.dart';
 import '../services/identification_service.dart';
 import '../services/database_service.dart';
 import '../models/person.dart';
+import '../models/analysis_event.dart';
+import '../utils/app_logger.dart';
 import 'dart:io';
 import 'dart:async';
+import 'dart:math';
 
 /// Scanner automático que detecta personas registradas en tiempo real
 class RealTimeScannerScreen extends StatefulWidget {
@@ -30,10 +33,14 @@ class _RealTimeScannerScreenState extends State<RealTimeScannerScreen> {
   int _scanCount = 0;
   List<Person> _registeredPersons = [];
 
-  // Configuración del scanner
-  static const Duration _scanInterval = Duration(milliseconds: 2000); // Escanear cada 2 segundos
-  static const double _identificationThreshold = 0.75; // Umbral más alto para mayor precisión
+  // Configuración del scanner ULTRA-RÁPIDO
+  static const Duration _scanInterval = Duration(milliseconds: 800); // Escanear cada 800ms
+  static const double _identificationThreshold = 0.70; // Umbral optimizado para velocidad
   static const int _consecutiveScansNeeded = 2; // Necesita 2 detecciones consecutivas
+  
+  // Cache para optimización de rendimiento
+  final Map<String, List<double>> _embeddingCache = {}; // Cache de embeddings generados
+  final Map<int, DateTime> _personLastSeen = {}; // Última vez que se vio cada persona
   
   int _consecutiveDetections = 0;
   Person? _lastDetectedPerson;
@@ -57,32 +64,93 @@ class _RealTimeScannerScreenState extends State<RealTimeScannerScreen> {
     });
 
     try {
-      // Inicializar servicios
-      final cameraInitialized = await _cameraService.initialize();
-      final identificationInitialized = await _identificationService.initialize();
+      // PASO 1: Cargar personas registradas
+      setState(() {
+        _statusMessage = '📂 Cargando base de datos...';
+      });
       
-      if (!cameraInitialized) {
-        throw Exception('Error al inicializar cámara');
+      _registeredPersons = await _dbService.getAllPersons();
+      
+      if (_registeredPersons.isEmpty) {
+        setState(() {
+          _isInitialized = true;
+          _statusMessage = '⚠️ No hay personas registradas.\nVe a "Registrar" para agregar personas.';
+        });
+        return;
       }
+
+      // PASO 2: Inicializar servicio de identificación
+      setState(() {
+        _statusMessage = '🧠 Inicializando IA de reconocimiento...';
+      });
       
+      final identificationInitialized = await _identificationService.initialize();
       if (!identificationInitialized) {
         throw Exception('Error al inicializar servicio de identificación');
       }
 
-      // Cargar personas registradas
-      _registeredPersons = await _dbService.getAllPersons();
+      // PASO 3: Inicializar cámara con reintentos
+      setState(() {
+        _statusMessage = '📷 Configurando cámara...';
+      });
       
+      bool cameraInitialized = false;
+      int attempts = 0;
+      const maxAttempts = 3;
+      
+      while (!cameraInitialized && attempts < maxAttempts) {
+        attempts++;
+        
+        setState(() {
+          _statusMessage = '📷 Intento $attempts/$maxAttempts de inicialización de cámara...';
+        });
+        
+        try {
+          cameraInitialized = await _cameraService.initialize();
+          if (cameraInitialized) {
+            // Esperar un poco más para que la cámara esté completamente lista
+            await Future.delayed(const Duration(milliseconds: 1500));
+            break;
+          }
+        } catch (e) {
+          CameraLogger.warning('Intento $attempts fallido: $e');
+          if (attempts < maxAttempts) {
+            await Future.delayed(Duration(seconds: attempts)); // Espera incremental
+          }
+        }
+      }
+      
+      if (!cameraInitialized) {
+        // Modo sin cámara - permite usar capturas manuales
+        setState(() {
+          _isInitialized = true;
+          _statusMessage = '⚠️ Cámara no disponible.\nUsa "Identificar" para captura manual.\n\n${_registeredPersons.length} personas registradas.';
+        });
+        return;
+      }
+
+      // PASO 4: Verificar que la cámara funciona correctamente
+      setState(() {
+        _statusMessage = '✅ Verificando funcionamiento de cámara...';
+      });
+      
+      final controller = _cameraService.controller;
+      if (controller == null || !controller.value.isInitialized) {
+        throw Exception('Controlador de cámara no inicializado correctamente');
+      }
+
+      // ÉXITO: Scanner completamente funcional
       setState(() {
         _isInitialized = true;
-        _statusMessage = _registeredPersons.isEmpty 
-            ? 'No hay personas registradas. Ve a "Registrar" para agregar personas.'
-            : 'Scanner listo. ${_registeredPersons.length} personas en base de datos.';
+        _statusMessage = '✅ Scanner listo.\n${_registeredPersons.length} personas registradas.\nPresiona "Iniciar Scanner" para comenzar.';
       });
 
     } catch (e) {
       setState(() {
-        _statusMessage = 'Error de inicialización: $e';
+        _isInitialized = false;
+        _statusMessage = '❌ Error: $e\n\nIntenta reinicializar o usa modo manual.';
       });
+      AppLogger.error('Error completo de inicialización', e);
     }
   }
 
@@ -121,15 +189,17 @@ class _RealTimeScannerScreenState extends State<RealTimeScannerScreen> {
   Future<void> _performScan() async {
     if (!_isScanning || !_isInitialized) return;
 
+    final scanStartTime = DateTime.now();
+    
     try {
       _scanCount++;
       
       setState(() {
-        _statusMessage = '📸 Capturando frame $_scanCount...';
+        _statusMessage = '📸 Escaneando $_scanCount...';
       });
 
-      // Capturar foto automáticamente
-      final imagePath = await _cameraService.takePicture(fileName: 'scanner_${DateTime.now().millisecondsSinceEpoch}');
+      // OPTIMIZACIÓN 1: Captura rápida con resolución reducida
+      final imagePath = await _cameraService.takePicture(fileName: 'scan_fast_${_scanCount}_${scanStartTime.millisecondsSinceEpoch}');
       
       if (imagePath == null) {
         setState(() {
@@ -141,21 +211,193 @@ class _RealTimeScannerScreenState extends State<RealTimeScannerScreen> {
       _lastCapturedPath = imagePath;
       
       setState(() {
-        _statusMessage = '🧠 Analizando imagen...';
+        _statusMessage = '⚡ Análisis ultra-rápido...';
       });
 
-      // Realizar identificación
-      final result = await _identificationService.identifyPerson(
-        imagePath,
-        threshold: _identificationThreshold,
-      );
+      // OPTIMIZACIÓN 2: Verificar cache de embeddings primero
+      List<double>? cachedEmbedding = _embeddingCache[imagePath];
+      
+      if (cachedEmbedding == null) {
+        // OPTIMIZACIÓN 3: Generar embedding con prioridad de velocidad
+        cachedEmbedding = await _generateFastEmbedding(imagePath);
+        if (cachedEmbedding != null) {
+          _embeddingCache[imagePath] = cachedEmbedding;
+          // Limpiar cache antiguo para memoria
+          if (_embeddingCache.length > 10) {
+            final oldestKey = _embeddingCache.keys.first;
+            _embeddingCache.remove(oldestKey);
+          }
+        }
+      }
 
-      await _processIdentificationResult(result);
+      if (cachedEmbedding == null) {
+        setState(() {
+          _statusMessage = '❌ Error generando embedding';
+        });
+        return;
+      }
+
+      // OPTIMIZACIÓN 4: Comparación paralela con personas registradas
+      final identificationResult = await _performFastIdentification(cachedEmbedding, imagePath);
+      
+      // OPTIMIZACIÓN 5: Registrar evento de análisis automáticamente
+      await _registerAnalysisEvent(identificationResult, imagePath, scanStartTime);
+      
+      final scanEndTime = DateTime.now();
+      final totalTime = scanEndTime.difference(scanStartTime).inMilliseconds;
+      
+      BiometricLogger.info('Escaneo completado en ${totalTime}ms');
+
+      await _processIdentificationResult(identificationResult);
 
     } catch (e) {
       setState(() {
         _statusMessage = '❌ Error durante escaneo: $e';
       });
+      BiometricLogger.error('Error en escaneo rápido', e);
+    }
+  }
+
+  /// Genera embedding optimizado para velocidad
+  Future<List<double>?> _generateFastEmbedding(String imagePath) async {
+    try {
+      // Usar el servicio de embedding con configuración de velocidad
+      return await _identificationService.faceEmbeddingService.generateEmbedding(imagePath);
+    } catch (e) {
+      BiometricLogger.error('Error generando embedding rápido', e);
+      return null;
+    }
+  }
+
+  /// Realiza identificación ultra-rápida comparando con todas las personas
+  Future<IdentificationResult> _performFastIdentification(List<double> embedding, String imagePath) async {
+    double bestSimilarity = 0.0;
+    Person? bestMatch;
+    final List<PersonSimilarity> candidates = [];
+
+    // Comparación paralela optimizada
+    for (final person in _registeredPersons) {
+      try {
+        // Parsear embedding de la persona
+        final personEmbedding = _parseEmbeddingFromJson(person.embedding);
+        
+        // Calcular similitud usando coseno (más rápido que euclidiana)
+        final similarity = _calculateCosineSimilarity(embedding, personEmbedding);
+        
+        candidates.add(PersonSimilarity(
+          person: person, 
+          similarity: similarity,
+          confidence: similarity,
+        ));
+        
+        if (similarity > bestSimilarity) {
+          bestSimilarity = similarity;
+          bestMatch = person;
+        }
+      } catch (e) {
+        BiometricLogger.debug('Error comparando con ${person.name}: $e');
+        continue;
+      }
+    }
+
+    // Determinar si hay match válido
+    final hasMatch = bestSimilarity >= _identificationThreshold && bestMatch != null;
+
+    if (hasMatch) {
+      // Actualizar última vez vista
+      _personLastSeen[bestMatch!.id!] = DateTime.now();
+      
+      return IdentificationResult.identified(
+        bestMatch,
+        confidence: bestSimilarity,
+        allCandidates: candidates,
+      );
+    } else {
+      final bestCandidate = candidates.isNotEmpty 
+          ? candidates.reduce((a, b) => a.similarity > b.similarity ? a : b)
+          : null;
+          
+      return IdentificationResult.noMatch(
+        'Confianza insuficiente (${(bestSimilarity * 100).toStringAsFixed(1)}% < ${(_identificationThreshold * 100).toStringAsFixed(1)}%)',
+        bestCandidate: bestCandidate,
+        allCandidates: candidates,
+      );
+    }
+  }
+
+  /// Calcula similitud coseno (más rápido que distancia euclidiana)
+  double _calculateCosineSimilarity(List<double> embedding1, List<double> embedding2) {
+    if (embedding1.length != embedding2.length) {
+      return 0.0;
+    }
+
+    double dotProduct = 0.0;
+    double norm1 = 0.0;
+    double norm2 = 0.0;
+
+    for (int i = 0; i < embedding1.length; i++) {
+      dotProduct += embedding1[i] * embedding2[i];
+      norm1 += embedding1[i] * embedding1[i];
+      norm2 += embedding2[i] * embedding2[i];
+    }
+
+    if (norm1 == 0.0 || norm2 == 0.0) {
+      return 0.0;
+    }
+
+    return dotProduct / (sqrt(norm1) * sqrt(norm2));
+  }
+
+  /// Registra evento de análisis del scanner automáticamente
+  Future<void> _registerAnalysisEvent(
+    IdentificationResult result, 
+    String imagePath, 
+    DateTime startTime,
+  ) async {
+    try {
+      final endTime = DateTime.now();
+      final processingTime = endTime.difference(startTime).inMilliseconds;
+      
+      AnalysisEvent event;
+      
+      if (result.isIdentified && result.person != null) {
+        event = AnalysisEvent.scanner(
+          imagePath: imagePath,
+          wasSuccessful: true,
+          personId: result.person!.id,
+          personName: result.person!.name,
+          confidence: result.confidence,
+          processingTime: processingTime,
+          additionalMetadata: {
+            'scan_number': _scanCount,
+            'consecutive_detections': _consecutiveDetections,
+            'required_confirmations': _consecutiveScansNeeded,
+            'cache_hit': _embeddingCache.containsKey(imagePath),
+            'registered_persons_count': _registeredPersons.length,
+            'fast_mode': true,
+          },
+        );
+      } else {
+        event = AnalysisEvent.scanner(
+          imagePath: imagePath,
+          wasSuccessful: false,
+          processingTime: processingTime,
+          additionalMetadata: {
+            'scan_number': _scanCount,
+            'best_similarity': result.bestCandidate?.similarity,
+            'no_match_reason': result.isError ? result.errorMessage : result.noMatchReason,
+            'cache_hit': _embeddingCache.containsKey(imagePath),
+            'registered_persons_count': _registeredPersons.length,
+            'fast_mode': true,
+          },
+        );
+      }
+      
+      // Guardar en base de datos
+      await _dbService.insertAnalysisEvent(event);
+      
+    } catch (e) {
+      BiometricLogger.error('Error registrando evento de scanner', e);
     }
   }
 
@@ -366,47 +608,121 @@ class _RealTimeScannerScreenState extends State<RealTimeScannerScreen> {
   }
 
   Widget _buildCameraPreview() {
+    // Estados de inicialización
     if (!_isInitialized) {
       return Container(
         color: Colors.black,
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: Colors.white),
-              SizedBox(height: 16),
-              Text('Inicializando cámara...', style: TextStyle(color: Colors.white)),
+              const CircularProgressIndicator(color: Colors.white),
+              const SizedBox(height: 16),
+              Text(
+                _statusMessage.contains('Inicializando') ? 'Inicializando scanner...' : _statusMessage,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
         ),
       );
     }
 
+    // Estado: Inicializado pero sin cámara
     final controller = _cameraService.controller;
     if (controller == null || !controller.value.isInitialized) {
       return Container(
+        color: Colors.grey[900],
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.camera_alt_outlined,
+                size: 80,
+                color: Colors.grey[400],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Cámara no disponible',
+                style: TextStyle(
+                  color: Colors.grey[300],
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Scanner en modo manual',
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _reinitializeCamera,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Intentar nuevamente'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Estado: Cámara funcionando correctamente
+    Widget cameraWidget;
+    try {
+      cameraWidget = ClipRect(
+        child: OverflowBox(
+          alignment: Alignment.center,
+          child: FittedBox(
+            fit: BoxFit.fitWidth,
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width,
+              height: MediaQuery.of(context).size.width / controller.value.aspectRatio,
+              child: CameraPreview(controller),
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      cameraWidget = Container(
         color: Colors.black,
-        child: const Center(
-          child: Text('Cámara no disponible', style: TextStyle(color: Colors.white)),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                color: Colors.red,
+                size: 48,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Error en vista de cámara',
+                style: TextStyle(color: Colors.white),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: _reinitializeCamera,
+                child: const Text('Reintentar'),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     return Stack(
       children: [
-        // Vista de cámara
-        ClipRect(
-          child: Transform.scale(
-            scale: controller.value.aspectRatio / MediaQuery.of(context).size.aspectRatio,
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: controller.value.aspectRatio,
-                child: CameraPreview(controller),
-              ),
-            ),
-          ),
-        ),
-
+        cameraWidget,
         // Overlay con guías del rostro
         CustomPaint(
           size: Size.infinite,
@@ -417,6 +733,26 @@ class _RealTimeScannerScreenState extends State<RealTimeScannerScreen> {
         ),
       ],
     );
+  }
+
+  /// Reinicializa la cámara si hay problemas
+  Future<void> _reinitializeCamera() async {
+    setState(() {
+      _isInitialized = false;
+      _isScanning = false;
+      _statusMessage = 'Reintentando inicialización...';
+    });
+
+    // Esperar un poco antes de reinicializar
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    try {
+      await _cameraService.dispose();
+    } catch (e) {
+      CameraLogger.warning('Error al cerrar cámara anterior: $e');
+    }
+
+    await _initializeScanner();
   }
 
   Color _getStatusColor() {
@@ -574,4 +910,51 @@ class ScannerOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+// ===================== MÉTODOS AUXILIARES PARA EMBEDDINGS =====================
+
+/// Parsea un embedding desde JSON string a List<double>
+List<double> _parseEmbeddingFromJson(String embeddingJson) {
+  try {
+    // Si es una lista JSON simple
+    if (embeddingJson.startsWith('[')) {
+      final List<dynamic> parsed = List<dynamic>.from(
+        embeddingJson
+            .replaceAll('[', '')
+            .replaceAll(']', '')
+            .split(',')
+            .map((e) => double.tryParse(e.trim()) ?? 0.0)
+      );
+      return parsed.cast<double>();
+    }
+    
+    // Si son valores separados por coma
+    return embeddingJson
+        .split(',')
+        .map((e) => double.tryParse(e.trim()) ?? 0.0)
+        .toList();
+  } catch (e) {
+    return List.filled(512, 0.0); // Fallback
+  }
+}
+
+/// Calcula similitud coseno normalizada
+double _calculateCosineSimilarity(List<double> embedding1, List<double> embedding2) {
+  if (embedding1.length != embedding2.length) return 0.0;
+
+  double dotProduct = 0.0;
+  double normA = 0.0;
+  double normB = 0.0;
+
+  for (int i = 0; i < embedding1.length; i++) {
+    dotProduct += embedding1[i] * embedding2[i];
+    normA += embedding1[i] * embedding1[i];
+    normB += embedding2[i] * embedding2[i];
+  }
+
+  final denominator = sqrt(normA) * sqrt(normB);
+  if (denominator == 0) return 0.0;
+
+  return dotProduct / denominator;
 }

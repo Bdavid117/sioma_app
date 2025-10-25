@@ -2,8 +2,10 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/person.dart';
 import '../models/identification_event.dart';
+import '../models/analysis_event.dart';
+import '../models/custom_event.dart';
 import '../utils/validation_utils.dart';
-import 'dart:developer' as developer;
+import '../utils/app_logger.dart';
 
 /// Servicio para gestionar la base de datos SQLite local
 class DatabaseService {
@@ -27,8 +29,9 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 3,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -60,6 +63,44 @@ class DatabaseService {
       )
     ''');
 
+    // Tabla de eventos de análisis detallados (v2.0)
+    await db.execute('''
+      CREATE TABLE analysis_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        image_path TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        analysis_type TEXT NOT NULL,
+        was_successful INTEGER NOT NULL,
+        identified_person_id INTEGER,
+        identified_person_name TEXT,
+        confidence REAL,
+        processing_time_ms INTEGER NOT NULL,
+        metadata TEXT NOT NULL,
+        device_info TEXT NOT NULL,
+        app_version TEXT NOT NULL,
+        FOREIGN KEY (identified_person_id) REFERENCES persons (id)
+      )
+    ''');
+
+    // Tabla de eventos personalizados (v3.0)
+    await db.execute('''
+      CREATE TABLE custom_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        person_id INTEGER NOT NULL,
+        person_name TEXT NOT NULL,
+        person_document TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        event_name TEXT NOT NULL,
+        location TEXT NOT NULL,
+        location_description TEXT,
+        status TEXT NOT NULL DEFAULT 'completado',
+        timestamp TEXT NOT NULL,
+        notes TEXT,
+        metadata TEXT,
+        FOREIGN KEY (person_id) REFERENCES persons (id)
+      )
+    ''');
+
     // Índices para mejorar el rendimiento
     await db.execute(
       'CREATE INDEX idx_document_id ON persons(document_id)',
@@ -67,6 +108,83 @@ class DatabaseService {
     await db.execute(
       'CREATE INDEX idx_timestamp ON identification_events(timestamp DESC)',
     );
+    await db.execute(
+      'CREATE INDEX idx_analysis_timestamp ON analysis_events(timestamp DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_analysis_type ON analysis_events(analysis_type)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_custom_events_timestamp ON custom_events(timestamp DESC)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_custom_events_type ON custom_events(event_type)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_custom_events_person ON custom_events(person_id)',
+    );
+  }
+
+  /// Actualiza la base de datos a versiones nuevas
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Agregar tabla de análisis detallados
+      await db.execute('''
+        CREATE TABLE analysis_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          image_path TEXT NOT NULL,
+          timestamp TEXT NOT NULL,
+          analysis_type TEXT NOT NULL,
+          was_successful INTEGER NOT NULL,
+          identified_person_id INTEGER,
+          identified_person_name TEXT,
+          confidence REAL,
+          processing_time_ms INTEGER NOT NULL,
+          metadata TEXT NOT NULL,
+          device_info TEXT NOT NULL,
+          app_version TEXT NOT NULL,
+          FOREIGN KEY (identified_person_id) REFERENCES persons (id)
+        )
+      ''');
+
+      await db.execute(
+        'CREATE INDEX idx_analysis_timestamp ON analysis_events(timestamp DESC)',
+      );
+      await db.execute(
+        'CREATE INDEX idx_analysis_type ON analysis_events(analysis_type)',
+      );
+    }
+
+    if (oldVersion < 3) {
+      // Agregar tabla de eventos personalizados
+      await db.execute('''
+        CREATE TABLE custom_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          person_id INTEGER NOT NULL,
+          person_name TEXT NOT NULL,
+          person_document TEXT NOT NULL,
+          event_type TEXT NOT NULL,
+          event_name TEXT NOT NULL,
+          location TEXT NOT NULL,
+          location_description TEXT,
+          status TEXT NOT NULL DEFAULT 'completado',
+          timestamp TEXT NOT NULL,
+          notes TEXT,
+          metadata TEXT,
+          FOREIGN KEY (person_id) REFERENCES persons (id)
+        )
+      ''');
+
+      await db.execute(
+        'CREATE INDEX idx_custom_events_timestamp ON custom_events(timestamp DESC)',
+      );
+      await db.execute(
+        'CREATE INDEX idx_custom_events_type ON custom_events(event_type)',
+      );
+      await db.execute(
+        'CREATE INDEX idx_custom_events_person ON custom_events(person_id)',
+      );
+    }
   }
 
   // ==================== OPERACIONES PERSONS ====================
@@ -115,14 +233,14 @@ class DatabaseService {
       final db = await database;
       final id = await db.insert('persons', validatedPerson.toMap());
 
-      developer.log('Person inserted successfully: ID=$id, Document=${validatedPerson.documentId}');
+      DatabaseLogger.info('Person inserted successfully: ID=$id, Document=${validatedPerson.documentId}');
       return id;
     } on SiomaValidationException {
       rethrow;
     } on SiomaDatabaseException {
       rethrow;
     } catch (e) {
-      developer.log('Error inserting person: $e', level: 1000);
+      DatabaseLogger.error('Error inserting person', e);
       throw SiomaDatabaseException('Error al insertar persona en la base de datos', e.toString());
     }
   }
@@ -145,7 +263,7 @@ class DatabaseService {
 
       return List.generate(maps.length, (i) => Person.fromMap(maps[i]));
     } catch (e) {
-      developer.log('Error getting all persons: $e', level: 1000);
+      DatabaseLogger.error('Error getting all persons', e);
       throw SiomaDatabaseException('Error al obtener la lista de personas', e.toString());
     }
   }
@@ -168,7 +286,7 @@ class DatabaseService {
       // Validar entrada para prevenir inyección SQL
       final documentValidation = ValidationUtils.validateDocumentId(documentId);
       if (!documentValidation.isValid) {
-        developer.log('Invalid document ID provided: $documentId');
+        DatabaseLogger.warning('Invalid document ID provided: $documentId');
         return null; // Retorna null en lugar de lanzar excepción para búsquedas
       }
 
@@ -183,7 +301,7 @@ class DatabaseService {
       if (maps.isEmpty) return null;
       return Person.fromMap(maps.first);
     } catch (e) {
-      developer.log('Error getting person by document: $e', level: 1000);
+      DatabaseLogger.error('Error getting person by document', e);
       return null;
     }
   }
@@ -262,6 +380,356 @@ class DatabaseService {
       where: 'timestamp < ?',
       whereArgs: [beforeDate.toIso8601String()],
     );
+  }
+
+  // ==================== OPERACIONES ANALYSIS EVENTS ====================
+
+  /// Inserta un nuevo evento de análisis detallado
+  Future<int> insertAnalysisEvent(AnalysisEvent event) async {
+    try {
+      final db = await database;
+      final result = await db.insert('analysis_events', event.toMap());
+      
+      DatabaseLogger.info('Evento de análisis registrado: ${event.analysisType} - ${event.wasSuccessful ? "Exitoso" : "Fallido"}');
+      
+      return result;
+    } catch (e) {
+      DatabaseLogger.error('Error al insertar evento de análisis', e);
+      rethrow;
+    }
+  }
+
+  /// Obtiene todos los eventos de análisis
+  Future<List<AnalysisEvent>> getAllAnalysisEvents({int? limit}) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'analysis_events',
+      orderBy: 'timestamp DESC',
+      limit: limit,
+    );
+    return List.generate(maps.length, (i) => AnalysisEvent.fromMap(maps[i]));
+  }
+
+  /// Obtiene eventos de análisis por tipo
+  Future<List<AnalysisEvent>> getAnalysisEventsByType(String analysisType, {int? limit}) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'analysis_events',
+      where: 'analysis_type = ?',
+      whereArgs: [analysisType],
+      orderBy: 'timestamp DESC',
+      limit: limit,
+    );
+    return List.generate(maps.length, (i) => AnalysisEvent.fromMap(maps[i]));
+  }
+
+  /// Obtiene eventos de análisis por persona identificada
+  Future<List<AnalysisEvent>> getAnalysisEventsByPerson(int personId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'analysis_events',
+      where: 'identified_person_id = ?',
+      whereArgs: [personId],
+      orderBy: 'timestamp DESC',
+    );
+    return List.generate(maps.length, (i) => AnalysisEvent.fromMap(maps[i]));
+  }
+
+  /// Obtiene estadísticas de análisis
+  Future<Map<String, dynamic>> getAnalysisStatistics() async {
+    final db = await database;
+    
+    // Conteo total
+    final totalResult = await db.rawQuery('SELECT COUNT(*) as count FROM analysis_events');
+    final total = Sqflite.firstIntValue(totalResult) ?? 0;
+    
+    // Exitosos vs fallidos
+    final successResult = await db.rawQuery('SELECT COUNT(*) as count FROM analysis_events WHERE was_successful = 1');
+    final successful = Sqflite.firstIntValue(successResult) ?? 0;
+    
+    // Por tipo de análisis
+    final typeResult = await db.rawQuery('''
+      SELECT analysis_type, COUNT(*) as count 
+      FROM analysis_events 
+      GROUP BY analysis_type
+    ''');
+    
+    // Tiempo promedio de procesamiento
+    final avgTimeResult = await db.rawQuery('SELECT AVG(processing_time_ms) as avg_time FROM analysis_events');
+    final avgProcessingTime = avgTimeResult.first['avg_time'] as double? ?? 0.0;
+    
+    // Eventos recientes (últimas 24 horas)
+    final yesterday = DateTime.now().subtract(const Duration(hours: 24));
+    final recentResult = await db.rawQuery('''
+      SELECT COUNT(*) as count 
+      FROM analysis_events 
+      WHERE timestamp > ?
+    ''', [yesterday.toIso8601String()]);
+    final recentCount = Sqflite.firstIntValue(recentResult) ?? 0;
+    
+    return {
+      'total_events': total,
+      'successful_events': successful,
+      'failed_events': total - successful,
+      'success_rate': total > 0 ? (successful / total * 100) : 0.0,
+      'events_by_type': Map.fromEntries(
+        typeResult.map((row) => MapEntry(
+          row['analysis_type'] as String,
+          row['count'] as int,
+        )),
+      ),
+      'avg_processing_time_ms': avgProcessingTime,
+      'recent_events_24h': recentCount,
+    };
+  }
+
+  /// Obtiene eventos de análisis en un rango de fechas
+  Future<List<AnalysisEvent>> getAnalysisEventsByDateRange(
+    DateTime startDate, 
+    DateTime endDate,
+  ) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'analysis_events',
+      where: 'timestamp BETWEEN ? AND ?',
+      whereArgs: [startDate.toIso8601String(), endDate.toIso8601String()],
+      orderBy: 'timestamp DESC',
+    );
+    return List.generate(maps.length, (i) => AnalysisEvent.fromMap(maps[i]));
+  }
+
+  /// Elimina eventos de análisis antiguos
+  Future<int> deleteOldAnalysisEvents(DateTime beforeDate) async {
+    final db = await database;
+    return await db.delete(
+      'analysis_events',
+      where: 'timestamp < ?',
+      whereArgs: [beforeDate.toIso8601String()],
+    );
+  }
+
+  /// Obtiene el conteo de eventos de análisis
+  Future<int> getAnalysisEventsCount() async {
+    final db = await database;
+    final result = await db.rawQuery('SELECT COUNT(*) as count FROM analysis_events');
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  // ==================== OPERACIONES CUSTOM EVENTS ====================
+
+  /// Inserta un nuevo evento personalizado
+  Future<int> insertCustomEvent(CustomEvent event) async {
+    try {
+      final db = await database;
+      final id = await db.insert('custom_events', event.toMap());
+      DatabaseLogger.info('Custom event inserted successfully: ID=$id, Type=${event.eventType}');
+      return id;
+    } catch (e) {
+      DatabaseLogger.error('Error inserting custom event', e);
+      throw SiomaDatabaseException('Error al insertar evento personalizado', e.toString());
+    }
+  }
+
+  /// Obtiene todos los eventos personalizados
+  Future<List<CustomEvent>> getAllCustomEvents({int? limit, String? eventType}) async {
+    try {
+      final db = await database;
+      
+      String query = 'custom_events';
+      List<dynamic> whereArgs = [];
+      String? where;
+      
+      if (eventType != null) {
+        where = 'event_type = ?';
+        whereArgs.add(eventType);
+      }
+      
+      final List<Map<String, dynamic>> maps = await db.query(
+        query,
+        where: where,
+        whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
+        orderBy: 'timestamp DESC',
+        limit: limit,
+      );
+      
+      return List.generate(maps.length, (i) => CustomEvent.fromMap(maps[i]));
+    } catch (e) {
+      DatabaseLogger.error('Error getting custom events', e);
+      throw SiomaDatabaseException('Error al obtener eventos personalizados', e.toString());
+    }
+  }
+
+  /// Obtiene eventos personalizados por persona
+  Future<List<CustomEvent>> getCustomEventsByPerson(int personId) async {
+    try {
+      final db = await database;
+      final List<Map<String, dynamic>> maps = await db.query(
+        'custom_events',
+        where: 'person_id = ?',
+        whereArgs: [personId],
+        orderBy: 'timestamp DESC',
+      );
+      return List.generate(maps.length, (i) => CustomEvent.fromMap(maps[i]));
+    } catch (e) {
+      DatabaseLogger.error('Error getting custom events by person', e);
+      throw SiomaDatabaseException('Error al obtener eventos por persona', e.toString());
+    }
+  }
+
+  /// Obtiene eventos personalizados por tipo
+  Future<List<CustomEvent>> getCustomEventsByType(String eventType, {int? limit}) async {
+    try {
+      final db = await database;
+      final List<Map<String, dynamic>> maps = await db.query(
+        'custom_events',
+        where: 'event_type = ?',
+        whereArgs: [eventType],
+        orderBy: 'timestamp DESC',
+        limit: limit,
+      );
+      return List.generate(maps.length, (i) => CustomEvent.fromMap(maps[i]));
+    } catch (e) {
+      DatabaseLogger.error('Error getting custom events by type', e);
+      throw SiomaDatabaseException('Error al obtener eventos por tipo', e.toString());
+    }
+  }
+
+  /// Obtiene eventos personalizados en un rango de fechas
+  Future<List<CustomEvent>> getCustomEventsByDateRange(
+    DateTime startDate, 
+    DateTime endDate, {
+    String? eventType,
+  }) async {
+    try {
+      final db = await database;
+      
+      String where = 'timestamp BETWEEN ? AND ?';
+      List<dynamic> whereArgs = [startDate.toIso8601String(), endDate.toIso8601String()];
+      
+      if (eventType != null) {
+        where += ' AND event_type = ?';
+        whereArgs.add(eventType);
+      }
+      
+      final List<Map<String, dynamic>> maps = await db.query(
+        'custom_events',
+        where: where,
+        whereArgs: whereArgs,
+        orderBy: 'timestamp DESC',
+      );
+      
+      return List.generate(maps.length, (i) => CustomEvent.fromMap(maps[i]));
+    } catch (e) {
+      DatabaseLogger.error('Error getting custom events by date range', e);
+      throw SiomaDatabaseException('Error al obtener eventos por rango de fechas', e.toString());
+    }
+  }
+
+  /// Actualiza un evento personalizado
+  Future<void> updateCustomEvent(CustomEvent event) async {
+    try {
+      final db = await database;
+      await db.update(
+        'custom_events',
+        event.toMap(),
+        where: 'id = ?',
+        whereArgs: [event.id],
+      );
+      DatabaseLogger.info('Custom event updated successfully: ID=${event.id}');
+    } catch (e) {
+      DatabaseLogger.error('Error updating custom event', e);
+      throw SiomaDatabaseException('Error al actualizar evento personalizado', e.toString());
+    }
+  }
+
+  /// Elimina un evento personalizado
+  Future<void> deleteCustomEvent(int eventId) async {
+    try {
+      final db = await database;
+      await db.delete(
+        'custom_events',
+        where: 'id = ?',
+        whereArgs: [eventId],
+      );
+      DatabaseLogger.info('Custom event deleted successfully: ID=$eventId');
+    } catch (e) {
+      DatabaseLogger.error('Error deleting custom event', e);
+      throw SiomaDatabaseException('Error al eliminar evento personalizado', e.toString());
+    }
+  }
+
+  /// Obtiene estadísticas de eventos personalizados
+  Future<Map<String, dynamic>> getCustomEventsStatistics() async {
+    try {
+      final db = await database;
+      
+      // Conteo total
+      final totalResult = await db.rawQuery('SELECT COUNT(*) as count FROM custom_events');
+      final total = Sqflite.firstIntValue(totalResult) ?? 0;
+      
+      // Por tipo de evento
+      final typeResult = await db.rawQuery('''
+        SELECT event_type, COUNT(*) as count 
+        FROM custom_events 
+        GROUP BY event_type
+      ''');
+      
+      // Por estado
+      final statusResult = await db.rawQuery('''
+        SELECT status, COUNT(*) as count 
+        FROM custom_events 
+        GROUP BY status
+      ''');
+      
+      // Eventos de hoy
+      final today = DateTime.now();
+      final startOfDay = DateTime(today.year, today.month, today.day);
+      final endOfDay = startOfDay.add(const Duration(days: 1));
+      
+      final todayResult = await db.rawQuery('''
+        SELECT COUNT(*) as count 
+        FROM custom_events 
+        WHERE timestamp BETWEEN ? AND ?
+      ''', [startOfDay.toIso8601String(), endOfDay.toIso8601String()]);
+      final todayCount = Sqflite.firstIntValue(todayResult) ?? 0;
+      
+      // Eventos de esta semana
+      final startOfWeek = today.subtract(Duration(days: today.weekday - 1));
+      final weekResult = await db.rawQuery('''
+        SELECT COUNT(*) as count 
+        FROM custom_events 
+        WHERE timestamp >= ?
+      ''', [startOfWeek.toIso8601String()]);
+      final weekCount = Sqflite.firstIntValue(weekResult) ?? 0;
+      
+      return {
+        'total_events': total,
+        'events_today': todayCount,
+        'events_this_week': weekCount,
+        'events_by_type': Map.fromEntries(
+          typeResult.map((row) => MapEntry(
+            row['event_type'] as String,
+            row['count'] as int,
+          )),
+        ),
+        'events_by_status': Map.fromEntries(
+          statusResult.map((row) => MapEntry(
+            row['status'] as String,
+            row['count'] as int,
+          )),
+        ),
+      };
+    } catch (e) {
+      DatabaseLogger.error('Error getting custom events statistics', e);
+      throw SiomaDatabaseException('Error al obtener estadísticas de eventos', e.toString());
+    }
+  }
+
+  /// Obtiene el conteo de eventos personalizados
+  Future<int> getCustomEventsCount() async {
+    final db = await database;
+    final result = await db.rawQuery('SELECT COUNT(*) as count FROM custom_events');
+    return Sqflite.firstIntValue(result) ?? 0;
   }
 
   /// Cierra la base de datos

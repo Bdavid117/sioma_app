@@ -4,7 +4,7 @@ import 'package:path/path.dart';
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
 import '../utils/validation_utils.dart';
-import 'dart:developer' as developer;
+import '../utils/app_logger.dart';
 
 /// Servicio para gestionar la cámara y captura de imágenes
 class CameraService {
@@ -28,16 +28,32 @@ class CameraService {
   /// Inicializa el servicio de cámara
   Future<bool> initialize() async {
     try {
+      CameraLogger.info('Iniciando inicialización de cámara...');
+      
+      // Limpiar recursos previos si existen
+      if (_controller != null) {
+        await dispose();
+      }
+
       // Solicitar permisos
+      CameraLogger.info('Solicitando permisos de cámara...');
       final cameraPermission = await Permission.camera.request();
       if (cameraPermission != PermissionStatus.granted) {
-        throw Exception('Permiso de cámara denegado');
+        CameraLogger.warning('Permiso de cámara denegado: $cameraPermission');
+        throw Exception('Permiso de cámara denegado. Por favor active los permisos en configuración.');
       }
 
       // Obtener cámaras disponibles
+      CameraLogger.info('Obteniendo cámaras disponibles...');
       _cameras = await availableCameras();
       if (_cameras.isEmpty) {
-        throw Exception('No hay cámaras disponibles');
+        CameraLogger.warning('No se encontraron cámaras disponibles');
+        throw Exception('No hay cámaras disponibles en este dispositivo');
+      }
+
+      CameraLogger.info('Cámaras encontradas: ${_cameras.length}');
+      for (int i = 0; i < _cameras.length; i++) {
+        CameraLogger.debug('Cámara $i: ${_cameras[i].name} - ${_cameras[i].lensDirection}');
       }
 
       // Buscar cámara frontal (preferida para reconocimiento facial)
@@ -49,7 +65,10 @@ class CameraService {
         }
       }
 
+      CameraLogger.info('Cámara seleccionada: ${selectedCamera.name} (${selectedCamera.lensDirection})');
+
       // Inicializar controlador
+      CameraLogger.info('Inicializando controlador de cámara...');
       _controller = CameraController(
         selectedCamera,
         ResolutionPreset.high,
@@ -57,12 +76,27 @@ class CameraService {
       );
 
       await _controller!.initialize();
+      
+      if (!_controller!.value.isInitialized) {
+        throw Exception('El controlador de cámara no se inicializó correctamente');
+      }
+
       _isInitialized = true;
+      CameraLogger.info('Cámara inicializada exitosamente');
 
       return true;
     } catch (e) {
-      print('Error al inicializar cámara: $e');
+      CameraLogger.error('Error al inicializar cámara', e);
       _isInitialized = false;
+      
+      // Limpiar recursos en caso de error
+      try {
+        await _controller?.dispose();
+        _controller = null;
+      } catch (disposeError) {
+        CameraLogger.warning('Error al limpiar recursos: $disposeError');
+      }
+      
       return false;
     }
   }
@@ -95,7 +129,7 @@ class CameraService {
       await _controller!.initialize();
       return true;
     } catch (e) {
-      print('Error al cambiar cámara: $e');
+      CameraLogger.error('Error al cambiar cámara', e);
       return false;
     }
   }
@@ -103,7 +137,7 @@ class CameraService {
   /// Captura una foto y la guarda en almacenamiento local con validaciones de seguridad
   Future<String?> takePicture({String? fileName}) async {
     if (!_isInitialized || _controller == null) {
-      developer.log('Camera not initialized or controller is null');
+      CameraLogger.warning('Camera not initialized or controller is null');
       return null;
     }
 
@@ -140,40 +174,45 @@ class CameraService {
       final String filePath = join(facesPath, fileName);
       final pathValidation = ValidationUtils.validateFilePath(filePath);
       if (!pathValidation.isValid) {
-        developer.log('Invalid file path generated: $filePath');
+        CameraLogger.warning('Invalid file path generated: $filePath');
         return null;
       }
 
       // Verificar que no excedamos límites de almacenamiento
       final existingFiles = await getSavedPhotos();
       if (existingFiles.length > 1000) { // Límite de seguridad
-        developer.log('Storage limit reached, cleaning old files');
+        CameraLogger.info('Storage limit reached, cleaning old files');
         // Eliminar archivos más antiguos si es necesario
         await _cleanOldFiles(existingFiles, 900);
       }
 
-      // Capturar foto con timeout de seguridad
+      // Capturar foto de forma optimizada
       final XFile photo = await _controller!.takePicture();
 
-      // Verificar tamaño del archivo por seguridad
+      // Mover archivo directamente (más rápido que copiar)
       final File tempFile = File(photo.path);
       final int fileSize = await tempFile.length();
+      
+      // Verificación rápida de tamaño
       if (fileSize > 10 * 1024 * 1024) { // Límite de 10MB
         await tempFile.delete();
-        developer.log('File too large: ${fileSize} bytes');
+        CameraLogger.warning('File too large: ${fileSize} bytes');
         return null;
       }
 
-      // Copiar archivo a ubicación permanente
-      await tempFile.copy(filePath);
+      // Mover archivo en lugar de copiar (más eficiente)
+      final File finalFile = await tempFile.rename(filePath);
+      
+      // Verificar que el archivo se movió correctamente
+      if (!(await finalFile.exists())) {
+        CameraLogger.warning('Failed to move file to final location');
+        return null;
+      }
 
-      // Eliminar archivo temporal de forma segura
-      await tempFile.delete();
-
-      developer.log('Photo captured successfully: $filePath (${fileSize} bytes)');
+      CameraLogger.info('Photo captured successfully: $filePath (${fileSize} bytes)');
       return filePath;
     } catch (e) {
-      developer.log('Error capturing photo: $e', level: 1000);
+      CameraLogger.error('Error capturing photo', e);
       return null;
     }
   }
@@ -192,9 +231,9 @@ class CameraService {
         await file.delete();
       }
 
-      developer.log('Cleaned ${filesToDelete.length} old files');
+      CameraLogger.info('Cleaned ${filesToDelete.length} old files');
     } catch (e) {
-      developer.log('Error cleaning old files: $e', level: 1000);
+      CameraLogger.error('Error cleaning old files', e);
     }
   }
 
@@ -213,13 +252,38 @@ class CameraService {
   /// Verifica si hay múltiples cámaras disponibles
   bool hasMultipleCameras() => _cameras.length > 1;
 
-  /// Libera los recursos de la cámara
+  /// Libera los recursos de la cámara de forma segura
   Future<void> dispose() async {
     if (_controller != null) {
-      await _controller!.dispose();
-      _controller = null;
+      try {
+        // Agregar delay para evitar crashes del plugin
+        await Future.delayed(const Duration(milliseconds: 100));
+        
+        // Verificar si aún está inicializado antes de dispose
+        if (_controller!.value.isInitialized) {
+          await _controller!.dispose();
+        }
+        _controller = null;
+      } catch (e) {
+        // Log del error pero no propagar para evitar crashes
+        CameraLogger.warning('Error disposing camera controller: $e');
+        _controller = null;
+      }
     }
     _isInitialized = false;
+  }
+
+  /// Disposición segura sin espera (para uso en dispose de widgets)
+  void disposeSync() {
+    if (_controller != null) {
+      Future.microtask(() async {
+        try {
+          await dispose();
+        } catch (e) {
+          CameraLogger.warning('Error in async dispose: $e');
+        }
+      });
+    }
   }
 
   /// Obtiene el directorio donde se guardan las fotos
@@ -242,7 +306,7 @@ class CameraService {
           .where((file) => file.path.toLowerCase().endsWith('.jpg'))
           .toList();
     } catch (e) {
-      print('Error al obtener fotos: $e');
+      CameraLogger.error('Error al obtener fotos', e);
       return [];
     }
   }
@@ -257,7 +321,7 @@ class CameraService {
       }
       return false;
     } catch (e) {
-      print('Error al eliminar foto: $e');
+      CameraLogger.error('Error al eliminar foto', e);
       return false;
     }
   }
